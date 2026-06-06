@@ -1,0 +1,1 @@
+This project is a Swift package called AllAuthClientSwift that provides a SwiftUI client, reusable auth views, and auth state helpers for apps integrating with Django AllAuth headless authentication APIs.
