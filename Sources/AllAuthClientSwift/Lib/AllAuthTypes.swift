@@ -1,7 +1,7 @@
 import Foundation
 import SwiftyJSON
 
-extension JSON: @unchecked Sendable {}
+extension JSON: @retroactive @unchecked Sendable {}
 
 /// Authentication flow types
 public enum AuthFlow: String, CaseIterable {
@@ -27,7 +27,7 @@ public enum AuthenticatorType: String {
 }
 
 /// Authentication process types
-public enum AuthProcess: String {
+public enum AuthProcess: String, Sendable {
     case login = "login"
     case connect = "connect"
 }

@@ -11,8 +11,10 @@ public struct ManageProvidersView: View {
     @State private var isLoading = false
     @State private var showSuccess = false
     @State private var successMessage = ""
+    @State private var providerError: String?
 
     private let client = AllAuthClient.shared
+    private let onSocialProviderSelected: SocialProviderSelectionHandler?
 
     var availableProviders: [JSON] {
         let connectedIds = Set(connectedProviders.map { $0["provider"]["id"].stringValue })
@@ -21,7 +23,16 @@ public struct ManageProvidersView: View {
         }
     }
 
-    public init() {}
+    var connectableProviders: [JSON] {
+        availableProviders.filter { provider in
+            onSocialProviderSelected != nil ||
+                ProviderListView.builtInProviderIds.contains(provider["id"].stringValue)
+        }
+    }
+
+    public init(onSocialProviderSelected: SocialProviderSelectionHandler? = nil) {
+        self.onSocialProviderSelected = onSocialProviderSelected
+    }
 
     public var body: some View {
         List {
@@ -48,14 +59,21 @@ public struct ManageProvidersView: View {
             }
 
             // Available providers to connect
-            if !availableProviders.isEmpty {
+            if !connectableProviders.isEmpty {
                 Section("Connect More Accounts") {
-                    ForEach(Array(availableProviders.enumerated()), id: \.offset) { _, provider in
-                        ProviderButton(provider: provider) {
-                            // Handle connecting new provider
-                            // This would typically open an OAuth flow
+                    ProviderListView(
+                        process: .connect,
+                        providers: connectableProviders,
+                        onProviderSelected: onSocialProviderSelected,
+                        onSuccess: { result in
+                            Task {
+                                await handleProviderConnection(result)
+                            }
+                        },
+                        onError: { error in
+                            providerError = error.localizedDescription
                         }
-                    }
+                    )
                 }
             }
 
@@ -63,6 +81,14 @@ public struct ManageProvidersView: View {
                 Section {
                     SuccessAlert(message: successMessage) {
                         showSuccess = false
+                    }
+                }
+            }
+
+            if let providerError {
+                Section {
+                    ErrorAlert(message: providerError) {
+                        self.providerError = nil
                     }
                 }
             }
@@ -105,6 +131,17 @@ public struct ManageProvidersView: View {
             }
         } catch {
             print("Failed to disconnect: \(error)")
+        }
+    }
+
+    private func handleProviderConnection(_ result: JSON) async {
+        if result.isSuccess {
+            successMessage = "Account connected"
+            showSuccess = true
+            providerError = nil
+            await loadProviders()
+        } else {
+            providerError = result.firstGeneralError ?? "Unable to connect account."
         }
     }
 }

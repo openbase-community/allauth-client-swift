@@ -431,7 +431,7 @@ public struct AuthenticateWebAuthnView: View {
 
         do {
             // First get options
-            let options = try await client.getWebAuthnAuthenticateOptions()
+            _ = try await client.getWebAuthnAuthenticateOptions()
 
             // Note: In production, use AuthenticationServices framework
             // to perform actual WebAuthn authentication
@@ -500,7 +500,7 @@ public struct ReauthenticateWebAuthnView: View {
         defer { isLoading = false }
 
         do {
-            let options = try await client.getWebAuthnReauthenticateOptions()
+            _ = try await client.getWebAuthnReauthenticateOptions()
 
             // Note: In production, use AuthenticationServices framework
             let placeholderCredential: [String: Any] = [

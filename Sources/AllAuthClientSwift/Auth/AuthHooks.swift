@@ -199,6 +199,7 @@ public enum AuthRoute: Hashable {
     case login
     case signup
     case verifyEmail
+    case requestLoginCode
     case confirmLoginCode
     case providerSignup
     case mfaAuthenticate

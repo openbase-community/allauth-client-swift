@@ -19,8 +19,7 @@ extension AllAuthClient {
 
     public func authenticateWithProviderToken(
         providerId: String,
-        token: String,
-        tokenType: String = "access_token",
+        token: [String: Any],
         process: AuthProcess = .login
     ) async throws -> JSON {
         return try await request(
@@ -28,9 +27,21 @@ extension AllAuthClient {
             url: urls.providerToken,
             data: [
                 "provider": providerId,
-                "token": ["access_token": token],
+                "token": token,
                 "process": process.rawValue
             ]
+        )
+    }
+
+    public func authenticateWithProviderToken(
+        providerId: String,
+        accessToken: String,
+        process: AuthProcess = .login
+    ) async throws -> JSON {
+        return try await authenticateWithProviderToken(
+            providerId: providerId,
+            token: ["access_token": accessToken],
+            process: process
         )
     }
 

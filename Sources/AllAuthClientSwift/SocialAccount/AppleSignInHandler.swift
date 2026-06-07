@@ -5,7 +5,7 @@ import SwiftyJSON
 
 /// Sign in with Apple handler
 /// Provides native Apple Sign In integration
-struct AppleSignInButton: View {
+public struct AppleSignInButton: View {
     @EnvironmentObject var authContext: AuthContext
 
     let process: AuthProcess
@@ -16,7 +16,7 @@ struct AppleSignInButton: View {
 
     private let client = AllAuthClient.shared
 
-    init(
+    public init(
         process: AuthProcess = .login,
         onSuccess: ((JSON) -> Void)? = nil,
         onError: ((Error) -> Void)? = nil
@@ -57,7 +57,7 @@ struct AppleSignInButton: View {
             }
 
             Task {
-                await authenticateWithApple(token: tokenString, credential: appleIDCredential)
+                await authenticateWithApple(token: tokenString)
             }
 
         case .failure(let error):
@@ -65,23 +65,21 @@ struct AppleSignInButton: View {
         }
     }
 
-    private func authenticateWithApple(token: String, credential: ASAuthorizationAppleIDCredential) async {
+    private func authenticateWithApple(token: String) async {
         isLoading = true
         defer { isLoading = false }
 
         do {
             let result = try await client.authenticateWithProviderToken(
                 providerId: "apple",
-                token: token,
+                token: ["id_token": token],
                 process: process
             )
 
             if result.isSuccess {
                 await authContext.refreshAuth()
-                onSuccess?(result)
-            } else {
-                onError?(AppleSignInError.authenticationFailed(result.firstGeneralError ?? "Unknown error"))
             }
+            onSuccess?(result)
         } catch {
             onError?(error)
         }
@@ -89,11 +87,11 @@ struct AppleSignInButton: View {
 }
 
 /// Apple Sign In errors
-enum AppleSignInError: LocalizedError {
+public enum AppleSignInError: LocalizedError {
     case invalidCredential
     case authenticationFailed(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidCredential:
             return "Invalid Apple credential"
@@ -107,17 +105,17 @@ enum AppleSignInError: LocalizedError {
 
 /// Coordinator for handling Sign in with Apple in UIKit contexts
 @MainActor
-class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+public class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
 
     private let client = AllAuthClient.shared
     private let process: AuthProcess
     private var continuation: CheckedContinuation<JSON, Error>?
 
-    init(process: AuthProcess = .login) {
+    public init(process: AuthProcess = .login) {
         self.process = process
     }
 
-    func signIn() async throws -> JSON {
+    public func signIn() async throws -> JSON {
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
 
@@ -134,7 +132,7 @@ class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAut
 
     // MARK: - ASAuthorizationControllerDelegate
 
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+    public func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
         guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
               let identityToken = appleIDCredential.identityToken,
               let tokenString = String(data: identityToken, encoding: .utf8) else {
@@ -147,7 +145,7 @@ class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAut
             do {
                 let result = try await client.authenticateWithProviderToken(
                     providerId: "apple",
-                    token: tokenString,
+                    token: ["id_token": tokenString],
                     process: process
                 )
                 continuation?.resume(returning: result)
@@ -158,20 +156,18 @@ class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAut
         }
     }
 
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+    public func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         continuation?.resume(throwing: error)
         continuation = nil
     }
 
     // MARK: - ASAuthorizationControllerPresentationContextProviding
 
-    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        // Get the key window
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else {
-            fatalError("No window available")
-        }
-        return window
+    public func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
     }
 }
 

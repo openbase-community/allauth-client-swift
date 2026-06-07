@@ -17,10 +17,15 @@ public struct LoginView: View {
 
     private let client = AllAuthClient.shared
     private let onShake: (() -> Void)?
+    private let onSocialProviderSelected: SocialProviderSelectionHandler?
     private let credentialStore = LoginCredentialStore()
 
-    public init(onShake: (() -> Void)? = nil) {
+    public init(
+        onShake: (() -> Void)? = nil,
+        onSocialProviderSelected: SocialProviderSelectionHandler? = nil
+    ) {
         self.onShake = onShake
+        self.onSocialProviderSelected = onSocialProviderSelected
     }
 
     public var body: some View {
@@ -45,11 +50,26 @@ public struct LoginView: View {
                     await login()
                 }
 
+                if !availableSocialProviders.isEmpty {
+                    socialDivider
+
+                    ProviderListView(
+                        process: .login,
+                        onProviderSelected: onSocialProviderSelected,
+                        onSuccess: { result in
+                            response = result
+                        },
+                        onError: { error in
+                            response = JSON(["errors": [["message": error.localizedDescription]]])
+                        }
+                    )
+                }
+
                 // Links
                 VStack(spacing: 12) {
                     if authContext.loginByCodeEnabled {
                         LinkButton(title: "Sign in with a code instead") {
-                            navigationManager.navigate(to: .confirmLoginCode)
+                            navigationManager.navigate(to: .requestLoginCode)
                         }
                     }
 
@@ -76,6 +96,29 @@ public struct LoginView: View {
         }
         .onShake {
             onShake?()
+        }
+    }
+
+    private var socialDivider: some View {
+        HStack(spacing: 12) {
+            Rectangle()
+                .fill(Color.secondary.opacity(0.25))
+                .frame(height: 1)
+
+            Text("or")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Rectangle()
+                .fill(Color.secondary.opacity(0.25))
+                .frame(height: 1)
+        }
+    }
+
+    private var availableSocialProviders: [JSON] {
+        authContext.socialProviders.filter { provider in
+            onSocialProviderSelected != nil ||
+                ProviderListView.builtInProviderIds.contains(provider["id"].stringValue)
         }
     }
 

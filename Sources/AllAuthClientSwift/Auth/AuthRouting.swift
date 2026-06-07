@@ -97,7 +97,7 @@ public struct AuthRoutingContainer<AuthenticatedContent: View, AnonymousContent:
     let authenticatedContent: () -> AuthenticatedContent
     let anonymousContent: () -> AnonymousContent
 
-    init(
+    public init(
         authContext: AuthContext,
         @ViewBuilder authenticated: @escaping () -> AuthenticatedContent,
         @ViewBuilder anonymous: @escaping () -> AnonymousContent

@@ -1,6 +1,6 @@
 # AllAuthClientSwift
 
-AllAuthClientSwift is a SwiftUI package for apps that authenticate against Django AllAuth headless APIs. It provides a JSON client, auth state management, token storage, reusable account views, MFA flows, social-provider flows, and auth diagnostics.
+AllAuthClientSwift is a SwiftUI package for apps that authenticate against Django AllAuth headless APIs. It provides a JSON client, auth state management, token storage, reusable account views, account creation, login by code, MFA flows, social-provider token flows, and auth diagnostics.
 
 The package is not a general Openbase API client and is not tied to Django REST Framework. It expects a backend that exposes the Django AllAuth headless endpoint contract, such as `/_allauth/app/v1/config`, `/_allauth/app/v1/auth/session`, `/_allauth/app/v1/auth/login`, and `/_allauth/app/v1/tokens/refresh`.
 
@@ -45,6 +45,8 @@ let response = try await AllAuthClient.shared.login(
     password: password
 )
 ```
+
+The default login UI shows account creation, login by code, and configured social providers when the backend exposes those flows. Sign in with Apple works out of the box through allauth's mobile `provider_token` endpoint. Other native providers can be connected by passing `onSocialProviderSelected` to `AllAuthRootView` or `LoginView` and returning the allauth provider-token response after completing that provider's SDK flow.
 
 ## License
 

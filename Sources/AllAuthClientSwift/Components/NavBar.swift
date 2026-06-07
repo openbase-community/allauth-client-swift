@@ -103,6 +103,11 @@ public struct NavBar: View {
 /// Settings view
 public struct SettingsView: View {
     @EnvironmentObject var authContext: AuthContext
+    private let onSocialProviderSelected: SocialProviderSelectionHandler?
+
+    public init(onSocialProviderSelected: SocialProviderSelectionHandler? = nil) {
+        self.onSocialProviderSelected = onSocialProviderSelected
+    }
 
     public var body: some View {
         List {
@@ -137,7 +142,7 @@ public struct SettingsView: View {
 
                 if !authContext.socialProviders.isEmpty {
                     NavigationLink {
-                        ManageProvidersView()
+                        ManageProvidersView(onSocialProviderSelected: onSocialProviderSelected)
                     } label: {
                         Label("Connected Accounts", systemImage: "person.2")
                     }

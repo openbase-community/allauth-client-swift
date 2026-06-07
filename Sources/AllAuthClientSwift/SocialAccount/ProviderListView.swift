@@ -2,38 +2,114 @@ import Foundation
 import SwiftUI
 import SwiftyJSON
 
-/// Social provider list for login
-/// Equivalent to ProviderList.js in the React implementation
+public typealias SocialProviderSelectionHandler = (_ provider: JSON, _ process: AuthProcess) async throws -> JSON
+
+/// Social provider list for login and account connection.
 public struct ProviderListView: View {
+    public static let builtInProviderIds: Set<String> = ["apple"]
+
     @EnvironmentObject var authContext: AuthContext
-    @EnvironmentObject var navigationManager: AuthNavigationManager
 
     let process: AuthProcess
-    var onProviderSelected: ((JSON) -> Void)?
+    let providerOverride: [JSON]?
+    let onProviderSelected: SocialProviderSelectionHandler?
+    let onSuccess: ((JSON) -> Void)?
+    let onError: ((Error) -> Void)?
 
-    public init(process: AuthProcess = .login, onProviderSelected: ((JSON) -> Void)? = nil) {
+    @State private var selectedProviderId: String?
+    @State private var providerError: String?
+
+    public init(
+        process: AuthProcess = .login,
+        providers: [JSON]? = nil,
+        onProviderSelected: SocialProviderSelectionHandler? = nil,
+        onSuccess: ((JSON) -> Void)? = nil,
+        onError: ((Error) -> Void)? = nil
+    ) {
         self.process = process
+        self.providerOverride = providers
         self.onProviderSelected = onProviderSelected
+        self.onSuccess = onSuccess
+        self.onError = onError
     }
 
     var providers: [JSON] {
-        return authContext.socialProviders
+        providerOverride ?? authContext.socialProviders
+    }
+
+    var availableProviders: [JSON] {
+        providers.filter { provider in
+            onProviderSelected != nil || Self.builtInProviderIds.contains(provider["id"].stringValue)
+        }
     }
 
     public var body: some View {
         VStack(spacing: 12) {
-            ForEach(Array(providers.enumerated()), id: \.offset) { _, provider in
-                ProviderButton(provider: provider) {
-                    onProviderSelected?(provider)
+            ForEach(Array(availableProviders.enumerated()), id: \.offset) { _, provider in
+                let providerId = provider["id"].stringValue
+
+                if providerId == "apple" && onProviderSelected == nil {
+                    AppleSignInButton(
+                        process: process,
+                        onSuccess: handleSuccess,
+                        onError: handleError
+                    )
+                } else {
+                    ProviderButton(
+                        provider: provider,
+                        isLoading: selectedProviderId == providerId
+                    ) {
+                        Task {
+                            await handleProviderSelected(provider)
+                        }
+                    }
+                }
+            }
+
+            if let providerError {
+                ErrorAlert(message: providerError) {
+                    self.providerError = nil
                 }
             }
         }
     }
+
+    private func handleProviderSelected(_ provider: JSON) async {
+        guard let onProviderSelected else {
+            providerError = "Native sign-in is not configured for \(provider["name"].stringValue)."
+            return
+        }
+
+        selectedProviderId = provider["id"].stringValue
+        providerError = nil
+        defer { selectedProviderId = nil }
+
+        do {
+            let result = try await onProviderSelected(provider, process)
+            handleSuccess(result)
+        } catch {
+            handleError(error)
+        }
+    }
+
+    private func handleSuccess(_ result: JSON) {
+        if result.isSuccess {
+            Task {
+                await authContext.refreshAuth()
+            }
+        }
+        onSuccess?(result)
+    }
+
+    private func handleError(_ error: Error) {
+        providerError = error.localizedDescription
+        onError?(error)
+    }
 }
 
-/// Button for a single social provider
 struct ProviderButton: View {
     let provider: JSON
+    let isLoading: Bool
     let action: () -> Void
 
     var providerId: String {
@@ -44,7 +120,7 @@ struct ProviderButton: View {
         provider["name"].stringValue
     }
 
-    public var body: some View {
+    var body: some View {
         Button(action: action) {
             HStack {
                 providerIcon
@@ -54,6 +130,11 @@ struct ProviderButton: View {
                     .fontWeight(.medium)
 
                 Spacer()
+
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                }
             }
             .padding()
             .frame(maxWidth: .infinity)
@@ -62,6 +143,7 @@ struct ProviderButton: View {
             .cornerRadius(8)
         }
         .buttonStyle(.plain)
+        .disabled(isLoading)
     }
 
     @ViewBuilder
@@ -115,20 +197,18 @@ struct ProviderButton: View {
     }
 }
 
-// MARK: - Provider Login Handler
-
-/// Handles social provider authentication flow
 @MainActor
 public class ProviderLoginHandler: ObservableObject {
-    @Published var isLoading = false
-    @Published var error: String?
+    @Published public var isLoading = false
+    @Published public var error: String?
 
     private let client = AllAuthClient.shared
 
-    /// Authenticate with a provider token (e.g., from Sign in with Apple)
-    func authenticateWithToken(
+    public init() {}
+
+    public func authenticateWithToken(
         providerId: String,
-        accessToken: String,
+        token: [String: Any],
         process: AuthProcess = .login
     ) async -> JSON? {
         isLoading = true
@@ -137,7 +217,7 @@ public class ProviderLoginHandler: ObservableObject {
         do {
             let result = try await client.authenticateWithProviderToken(
                 providerId: providerId,
-                token: accessToken,
+                token: token,
                 process: process
             )
             return result
@@ -146,9 +226,19 @@ public class ProviderLoginHandler: ObservableObject {
             return nil
         }
     }
-}
 
-// MARK: - Preview
+    public func authenticateWithToken(
+        providerId: String,
+        accessToken: String,
+        process: AuthProcess = .login
+    ) async -> JSON? {
+        await authenticateWithToken(
+            providerId: providerId,
+            token: ["access_token": accessToken],
+            process: process
+        )
+    }
+}
 
 #Preview {
     VStack(spacing: 20) {
@@ -159,5 +249,4 @@ public class ProviderLoginHandler: ObservableObject {
     }
     .padding()
     .environmentObject(AuthContext.shared)
-    .environmentObject(AuthNavigationManager(authContext: AuthContext.shared))
 }

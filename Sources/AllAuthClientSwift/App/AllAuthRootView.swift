@@ -9,15 +9,18 @@ public struct AllAuthRootView<AuthenticatedContent: View>: View {
 
     private let authenticatedContent: () -> AuthenticatedContent
     private let onLoginShake: (() -> Void)?
+    private let onSocialProviderSelected: SocialProviderSelectionHandler?
 
     public init(
         onLoginShake: (() -> Void)? = nil,
+        onSocialProviderSelected: SocialProviderSelectionHandler? = nil,
         @ViewBuilder authenticatedContent: @escaping () -> AuthenticatedContent
     ) {
         let context = AuthContext.shared
         _navigationManager = StateObject(wrappedValue: AuthNavigationManager(authContext: context))
         self.authenticatedContent = authenticatedContent
         self.onLoginShake = onLoginShake
+        self.onSocialProviderSelected = onSocialProviderSelected
     }
 
     public var body: some View {
@@ -28,7 +31,10 @@ public struct AllAuthRootView<AuthenticatedContent: View>: View {
                 authenticatedContent()
                     .environmentObject(navigationManager)
             } else {
-                AllAuthUnauthenticatedRootView(onLoginShake: onLoginShake)
+                AllAuthUnauthenticatedRootView(
+                    onLoginShake: onLoginShake,
+                    onSocialProviderSelected: onSocialProviderSelected
+                )
             }
         }
         .environmentObject(navigationManager)
@@ -66,9 +72,14 @@ public struct AllAuthUnauthenticatedRootView: View {
     @EnvironmentObject var navigationManager: AuthNavigationManager
 
     private let onLoginShake: (() -> Void)?
+    private let onSocialProviderSelected: SocialProviderSelectionHandler?
 
-    public init(onLoginShake: (() -> Void)? = nil) {
+    public init(
+        onLoginShake: (() -> Void)? = nil,
+        onSocialProviderSelected: SocialProviderSelectionHandler? = nil
+    ) {
         self.onLoginShake = onLoginShake
+        self.onSocialProviderSelected = onSocialProviderSelected
     }
 
     public var body: some View {
@@ -95,7 +106,10 @@ public struct AllAuthUnauthenticatedRootView: View {
         } else if authContext.isPending(flow: .mfaTrust) {
             MFATrustDeviceView()
         } else {
-            LoginView(onShake: onLoginShake)
+            LoginView(
+                onShake: onLoginShake,
+                onSocialProviderSelected: onSocialProviderSelected
+            )
         }
     }
 
@@ -103,11 +117,16 @@ public struct AllAuthUnauthenticatedRootView: View {
     public func destinationView(for route: AuthRoute) -> some View {
         switch route {
         case .login:
-            LoginView(onShake: onLoginShake)
+            LoginView(
+                onShake: onLoginShake,
+                onSocialProviderSelected: onSocialProviderSelected
+            )
         case .signup:
             SignupView()
         case .verifyEmail:
             VerificationEmailSentView()
+        case .requestLoginCode:
+            RequestLoginCodeView()
         case .confirmLoginCode:
             ConfirmLoginCodeView()
         case .providerSignup:
@@ -135,7 +154,7 @@ public struct AllAuthUnauthenticatedRootView: View {
         case .sessions:
             SessionsView()
         case .socialAccounts:
-            ManageProvidersView()
+            ManageProvidersView(onSocialProviderSelected: onSocialProviderSelected)
         }
     }
 }
@@ -143,9 +162,14 @@ public struct AllAuthUnauthenticatedRootView: View {
 /// Helper view builder for authenticated navigation destinations
 public struct AllAuthAccountDestinations: View {
     let route: AuthRoute
+    let onSocialProviderSelected: SocialProviderSelectionHandler?
 
-    public init(route: AuthRoute) {
+    public init(
+        route: AuthRoute,
+        onSocialProviderSelected: SocialProviderSelectionHandler? = nil
+    ) {
         self.route = route
+        self.onSocialProviderSelected = onSocialProviderSelected
     }
 
     public var body: some View {
@@ -159,7 +183,7 @@ public struct AllAuthAccountDestinations: View {
         case .sessions:
             SessionsView()
         case .socialAccounts:
-            ManageProvidersView()
+            ManageProvidersView(onSocialProviderSelected: onSocialProviderSelected)
         case .reauthenticate:
             ReauthenticateView()
         case .mfaReauthenticate:
