@@ -69,16 +69,29 @@ extension AllAuthClient {
             ]
         )
 
-        if httpResponse.statusCode == 401 && autoRefreshJWT && jwtRefreshToken != nil {
-            if isTokenRefreshRequest {
-                AuthDiagnostics.log(
-                    "AllAuthClient",
-                    "token refresh returned 401",
-                    metadata: ["body": AuthDiagnostics.redactSensitiveText(String(data: responseData, encoding: .utf8) ?? "<non-utf8>")]
-                )
-                expireSessionLocally()
+        if isTokenRefreshRequest, !(200 ... 299).contains(httpResponse.statusCode) {
+            AuthDiagnostics.log(
+                "AllAuthClient",
+                "token refresh failed",
+                metadata: [
+                    "status": "\(httpResponse.statusCode)",
+                    "body": AuthDiagnostics.redactSensitiveText(String(data: responseData, encoding: .utf8) ?? "<non-utf8>"),
+                ]
+            )
+            if [400, 401, 410].contains(httpResponse.statusCode) {
+                // allauth rejects a rotated/expired refresh token with 400.
+                // Drop the dead JWT pair but keep the session token so the
+                // app can attempt session-based recovery before forcing a
+                // full re-login.
+                clearJWTTokens()
                 throw AllAuthError.sessionExpired
             }
+            throw AllAuthError.apiError(
+                "JWT refresh failed with status \(httpResponse.statusCode)"
+            )
+        }
+
+        if httpResponse.statusCode == 401 && autoRefreshJWT && jwtRefreshToken != nil {
             AuthDiagnostics.log(
                 "AllAuthClient",
                 "request returned 401; refreshing JWT and retrying once",

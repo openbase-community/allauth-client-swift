@@ -49,9 +49,14 @@ extension AllAuthClient {
             data: ["refresh_token": refreshToken],
             autoRefreshJWT: false
         )
-        if jwtAccessToken == nil {
-            expireSessionLocally()
-            throw AllAuthError.sessionExpired
+        let refreshedAccessToken =
+            result["data"]["access_token"].string ?? result["meta"]["access_token"].string
+        guard let refreshedAccessToken, !refreshedAccessToken.isEmpty else {
+            AuthDiagnostics.log(
+                "AllAuthClient",
+                "token refresh response did not contain an access token"
+            )
+            throw AllAuthError.invalidResponse
         }
         return result
     }
