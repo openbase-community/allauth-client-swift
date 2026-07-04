@@ -123,22 +123,17 @@ public struct LoginView: View {
     }
 
     private func login() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
+        response = await performRequest(loading: $isLoading, context: "login") {
             if authContext.emailAuthEnabled && !email.isEmpty {
-                response = try await client.login(email: email, password: password)
+                return try await client.login(email: email, password: password)
             } else {
-                response = try await client.login(username: username, password: password)
+                return try await client.login(username: username, password: password)
             }
+        }
 
-            if response?.isSuccess == true {
-                saveSuccessfulCredentials()
-                // Navigation handled by auth context observer
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            saveSuccessfulCredentials()
+            // Navigation handled by auth context observer
         }
     }
 

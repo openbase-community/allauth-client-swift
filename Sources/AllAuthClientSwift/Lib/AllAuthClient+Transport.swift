@@ -183,33 +183,11 @@ extension AllAuthClient {
             return
         }
 
-        let previouslyAuthenticated = previousAuth?["meta"]["is_authenticated"].bool ?? false
-        let currentlyAuthenticated = json["meta"]["is_authenticated"].bool ?? false
-        let status = json["status"].intValue
-
-        if !previouslyAuthenticated && currentlyAuthenticated && status == 200 {
-            lastAuthChange = .loggedIn
-            AuthDiagnostics.log("AllAuthClient", "auth state changed", metadata: ["event": "loggedIn"])
-        } else if previouslyAuthenticated && !currentlyAuthenticated && status == 401 {
-            lastAuthChange = .loggedOut
-            AuthDiagnostics.log("AllAuthClient", "auth state changed", metadata: ["event": "loggedOut"])
-        } else if status == 401 {
-            let flows = json["data"]["flows"].arrayValue
-            let hasReauthFlow = flows.contains { flow in
-                flow["id"].string == AuthFlow.reauthenticate.rawValue ||
-                flow["id"].string == AuthFlow.mfaReauthenticate.rawValue
-            }
-            if hasReauthFlow {
-                lastAuthChange = .reauthenticationRequired
-                AuthDiagnostics.log(
-                    "AllAuthClient",
-                    "auth state changed",
-                    metadata: ["event": "reauthenticationRequired"]
-                )
-            }
-        } else if status == 200 && json["data"]["flows"].exists() {
-            lastAuthChange = .flowUpdated
-            AuthDiagnostics.log("AllAuthClient", "auth flow updated")
+        guard let event = AuthChangeEvent.detect(previous: previousAuth, current: json) else {
+            return
         }
+
+        lastAuthChange = event
+        AuthDiagnostics.log("AllAuthClient", "auth state changed", metadata: ["event": "\(event)"])
     }
 }

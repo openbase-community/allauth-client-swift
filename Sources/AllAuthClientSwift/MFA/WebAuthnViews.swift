@@ -83,22 +83,14 @@ public struct AddWebAuthnView: View {
     }
 
     var successView: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.green)
-
-            Text("Security Key Added!")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Your security key has been registered successfully.")
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-
-            PrimaryButton(title: "Done", isLoading: false) {
-                dismiss()
-            }
+        StatusView(
+            icon: "checkmark.circle.fill",
+            color: .green,
+            title: "Security Key Added!",
+            message: "Your security key has been registered successfully.",
+            buttonTitle: "Done"
+        ) {
+            dismiss()
         }
     }
 
@@ -109,7 +101,11 @@ public struct AddWebAuthnView: View {
         do {
             creationOptions = try await client.getPasswordlessWebAuthnOptions()
         } catch {
-            print("Failed to load creation options: \(error)")
+            AuthDiagnostics.log(
+                "AddWebAuthnView",
+                "failed to load creation options",
+                metadata: ["error": "\(error)"]
+            )
         }
     }
 
@@ -119,30 +115,18 @@ public struct AddWebAuthnView: View {
             return
         }
 
-        isRegistering = true
-        defer { isRegistering = false }
+        guard let creationOptions else { return }
 
-        // Note: In production, you would use the AuthenticationServices framework
-        // to perform actual WebAuthn registration using creationOptions
-        // This is a placeholder that shows the flow
-
-        do {
-            // Placeholder credential - in production, get from ASAuthorizationController
-            let placeholderCredential: [String: Any] = [
-                "id": "placeholder",
-                "type": "public-key"
-            ]
-
-            response = try await client.addWebAuthnAuthenticator(
+        response = await performRequest(loading: $isRegistering, context: "register security key") {
+            let credential = try await WebAuthnAuthenticator().register(creationOptions: creationOptions)
+            return try await client.addWebAuthnAuthenticator(
                 name: name,
-                credential: placeholderCredential
+                credential: credential
             )
+        }
 
-            if response?.isSuccess == true {
-                showSuccess = true
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            showSuccess = true
         }
     }
 }
@@ -171,12 +155,12 @@ public struct ListWebAuthnView: View {
                             Text(auth["name"].stringValue)
                                 .fontWeight(.medium)
 
-                            Text("Added \(formatDate(auth["created_at"].doubleValue))")
+                            Text("Added \(AuthDateFormatting.relativeDate(fromTimestamp: auth["created_at"].doubleValue))")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
 
                             if auth["last_used_at"].double != nil {
-                                Text("Last used \(formatDate(auth["last_used_at"].doubleValue))")
+                                Text("Last used \(AuthDateFormatting.relativeDate(fromTimestamp: auth["last_used_at"].doubleValue))")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -212,16 +196,11 @@ public struct ListWebAuthnView: View {
     }
 
     private func loadAuthenticators() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await client.getWebAuthnAuthenticators()
-            if result.isSuccess {
-                authenticators = result["data"].arrayValue
-            }
-        } catch {
-            print("Failed to load authenticators: \(error)")
+        let result = await performRequest(loading: $isLoading, context: "load authenticators") {
+            try await client.getWebAuthnAuthenticators()
+        }
+        if result.isSuccess {
+            authenticators = result["data"].arrayValue
         }
     }
 
@@ -232,17 +211,13 @@ public struct ListWebAuthnView: View {
                 _ = try await client.deleteWebAuthnAuthenticators(ids: ids)
                 await loadAuthenticators()
             } catch {
-                print("Failed to delete authenticators: \(error)")
+                AuthDiagnostics.log(
+                    "ListWebAuthnView",
+                    "failed to delete authenticators",
+                    metadata: ["error": "\(error)"]
+                )
             }
         }
-    }
-
-    private func formatDate(_ timestamp: Double) -> String {
-        guard timestamp > 0 else { return "Unknown" }
-        let date = Date(timeIntervalSince1970: timestamp)
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -286,7 +261,7 @@ public struct UpdateWebAuthnView: View {
                 HStack {
                     Text("Added")
                     Spacer()
-                    Text(formatDate(authenticator["created_at"].doubleValue))
+                    Text(AuthDateFormatting.absoluteDate(fromTimestamp: authenticator["created_at"].doubleValue))
                         .foregroundColor(.secondary)
                 }
 
@@ -294,7 +269,7 @@ public struct UpdateWebAuthnView: View {
                     HStack {
                         Text("Last Used")
                         Spacer()
-                        Text(formatDate(authenticator["last_used_at"].doubleValue))
+                        Text(AuthDateFormatting.absoluteDate(fromTimestamp: authenticator["last_used_at"].doubleValue))
                             .foregroundColor(.secondary)
                     }
                 }
@@ -336,20 +311,15 @@ public struct UpdateWebAuthnView: View {
     }
 
     private func updateName() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            response = try await client.updateWebAuthnAuthenticator(
+        response = await performRequest(loading: $isLoading, context: "update security key") {
+            try await client.updateWebAuthnAuthenticator(
                 id: authenticator["id"].stringValue,
                 name: name
             )
+        }
 
-            if response?.isSuccess == true {
-                dismiss()
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            dismiss()
         }
     }
 
@@ -366,17 +336,64 @@ public struct UpdateWebAuthnView: View {
                 dismiss()
             }
         } catch {
-            print("Failed to delete: \(error)")
+            AuthDiagnostics.log(
+                "UpdateWebAuthnView",
+                "failed to delete authenticator",
+                metadata: ["error": "\(error)"]
+            )
         }
     }
+}
 
-    private func formatDate(_ timestamp: Double) -> String {
-        guard timestamp > 0 else { return "Unknown" }
-        let date = Date(timeIntervalSince1970: timestamp)
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+// MARK: - WebAuthn Prompt Form
+
+/// Shared form for the WebAuthn authenticate/reauthenticate flows
+struct WebAuthnPromptForm<Footer: View>: View {
+    let title: String
+    let subtitle: String
+    let message: String
+    let submit: @MainActor () async throws -> JSON
+    let onSuccess: @MainActor () async -> Void
+    @ViewBuilder let footer: () -> Footer
+
+    @State private var isLoading = false
+    @State private var response: JSON?
+
+    var body: some View {
+        AuthForm(
+            title: title,
+            subtitle: subtitle
+        ) {
+            VStack(spacing: 24) {
+                Image(systemName: "person.badge.key.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(.purple)
+
+                Text(message)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+
+                FormErrors(errors: response)
+
+                PrimaryButton(title: "Use Security Key", isLoading: isLoading) {
+                    await run()
+                }
+
+                footer()
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func run() async {
+        response = await performRequest(loading: $isLoading, context: "WebAuthn authentication") {
+            try await submit()
+        }
+
+        if response?.isSuccess == true {
+            await onSuccess()
+        }
     }
 }
 
@@ -388,67 +405,28 @@ public struct AuthenticateWebAuthnView: View {
     @EnvironmentObject var authContext: AuthContext
     @EnvironmentObject var navigationManager: AuthNavigationManager
 
-    @State private var isLoading = false
-    @State private var response: JSON?
-
     private let client = AllAuthClient.shared
 
     public var body: some View {
-        AuthForm(
+        WebAuthnPromptForm(
             title: "Security Key",
-            subtitle: "Use your security key to sign in."
-        ) {
-            VStack(spacing: 24) {
-                Image(systemName: "person.badge.key.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.purple)
-
-                Text("Insert your security key and tap the button, or use your passkey.")
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-
-                FormErrors(errors: response)
-
-                PrimaryButton(title: "Use Security Key", isLoading: isLoading) {
-                    await authenticate()
-                }
-
-                // Alternative methods
-                if authContext.availableMFATypes.contains(AuthenticatorType.totp.rawValue) {
-                    LinkButton(title: "Use authenticator app instead") {
-                        navigationManager.pop()
-                    }
-                }
-            }
-        }
-        .navigationTitle("Security Key")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func authenticate() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            // First get options
-            _ = try await client.getWebAuthnAuthenticateOptions()
-
-            // Note: In production, use AuthenticationServices framework
-            // to perform actual WebAuthn authentication
-            // This is a placeholder
-
-            let placeholderCredential: [String: Any] = [
-                "id": "placeholder",
-                "type": "public-key"
-            ]
-
-            response = try await client.authenticateWebAuthn(credential: placeholderCredential)
-
-            if response?.isSuccess == true {
+            subtitle: "Use your security key to sign in.",
+            message: "Insert your security key and tap the button, or use your passkey.",
+            submit: {
+                let options = try await client.getWebAuthnAuthenticateOptions()
+                let credential = try await WebAuthnAuthenticator().authenticate(requestOptions: options)
+                return try await client.authenticateWebAuthn(credential: credential)
+            },
+            onSuccess: {
                 await authContext.refreshAuth()
             }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        ) {
+            // Alternative methods
+            if authContext.availableMFATypes.contains(AuthenticatorType.totp.rawValue) {
+                LinkButton(title: "Use authenticator app instead") {
+                    navigationManager.pop()
+                }
+            }
         }
     }
 }
@@ -461,61 +439,26 @@ public struct ReauthenticateWebAuthnView: View {
     @EnvironmentObject var authContext: AuthContext
     @EnvironmentObject var navigationManager: AuthNavigationManager
 
-    @State private var isLoading = false
-    @State private var response: JSON?
-
     private let client = AllAuthClient.shared
 
     public var body: some View {
-        AuthForm(
+        WebAuthnPromptForm(
             title: "Verify Identity",
-            subtitle: "Use your security key to verify your identity."
-        ) {
-            VStack(spacing: 24) {
-                Image(systemName: "person.badge.key.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.purple)
-
-                Text("Insert your security key and tap the button.")
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-
-                FormErrors(errors: response)
-
-                PrimaryButton(title: "Use Security Key", isLoading: isLoading) {
-                    await reauthenticate()
-                }
-
-                LinkButton(title: "Cancel") {
-                    navigationManager.pop()
-                }
-            }
-        }
-        .navigationTitle("Verify Identity")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func reauthenticate() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            _ = try await client.getWebAuthnReauthenticateOptions()
-
-            // Note: In production, use AuthenticationServices framework
-            let placeholderCredential: [String: Any] = [
-                "id": "placeholder",
-                "type": "public-key"
-            ]
-
-            response = try await client.reauthenticateWebAuthn(credential: placeholderCredential)
-
-            if response?.isSuccess == true {
+            subtitle: "Use your security key to verify your identity.",
+            message: "Insert your security key and tap the button.",
+            submit: {
+                let options = try await client.getWebAuthnReauthenticateOptions()
+                let credential = try await WebAuthnAuthenticator().authenticate(requestOptions: options)
+                return try await client.reauthenticateWebAuthn(credential: credential)
+            },
+            onSuccess: {
                 await authContext.refreshAuth()
                 navigationManager.pop()
             }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        ) {
+            LinkButton(title: "Cancel") {
+                navigationManager.pop()
+            }
         }
     }
 }

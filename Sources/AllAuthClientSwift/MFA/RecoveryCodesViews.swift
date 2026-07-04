@@ -74,17 +74,12 @@ public struct GenerateRecoveryCodesView: View {
 
     var codesView: some View {
         VStack(spacing: 24) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.green)
-
-            Text("Your Recovery Codes")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Save these codes in a safe place. You won't be able to see them again.")
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+            StatusView(
+                icon: "checkmark.circle.fill",
+                color: .green,
+                title: "Your Recovery Codes",
+                message: "Save these codes in a safe place. You won't be able to see them again."
+            )
 
             // Codes display
             VStack(spacing: 8) {
@@ -122,17 +117,12 @@ public struct GenerateRecoveryCodesView: View {
     }
 
     private func generateCodes() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "generate recovery codes") {
+            try await client.generateRecoveryCodes()
+        }
 
-        do {
-            response = try await client.generateRecoveryCodes()
-
-            if response?.isSuccess == true {
-                codes = response?["data"]["unused_codes"].arrayValue.map { $0.stringValue } ?? []
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            codes = response?["data"]["unused_codes"].arrayValue.map { $0.stringValue } ?? []
         }
     }
 }
@@ -203,17 +193,12 @@ public struct RecoveryCodesView: View {
     }
 
     private func loadCodes() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await client.getRecoveryCodes()
-            if result.isSuccess {
-                unusedCodes = result["data"]["unused_codes"].arrayValue.map { $0.stringValue }
-                totalCount = result["data"]["total_code_count"].intValue
-            }
-        } catch {
-            print("Failed to load recovery codes: \(error)")
+        let result = await performRequest(loading: $isLoading, context: "load recovery codes") {
+            try await client.getRecoveryCodes()
+        }
+        if result.isSuccess {
+            unusedCodes = result["data"]["unused_codes"].arrayValue.map { $0.stringValue }
+            totalCount = result["data"]["total_code_count"].intValue
         }
     }
 }
@@ -268,17 +253,12 @@ public struct AuthenticateRecoveryCodesView: View {
     }
 
     private func authenticate() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "authenticate with recovery code") {
+            try await client.authenticateWithRecoveryCode(code: code)
+        }
 
-        do {
-            response = try await client.authenticateWithRecoveryCode(code: code)
-
-            if response?.isSuccess == true {
-                await authContext.refreshAuth()
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            await authContext.refreshAuth()
         }
     }
 }
@@ -333,18 +313,13 @@ public struct ReauthenticateRecoveryCodesView: View {
     }
 
     private func reauthenticate() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "reauthenticate with recovery code") {
+            try await client.reauthenticateWithRecoveryCode(code: code)
+        }
 
-        do {
-            response = try await client.reauthenticateWithRecoveryCode(code: code)
-
-            if response?.isSuccess == true {
-                await authContext.refreshAuth()
-                navigationManager.pop()
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            await authContext.refreshAuth()
+            navigationManager.pop()
         }
     }
 }

@@ -199,17 +199,12 @@ public struct MFATrustDeviceView: View {
     }
 
     private func trustDevice() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "trust device") {
+            try await client.trustDevice()
+        }
 
-        do {
-            response = try await client.trustDevice()
-
-            if response?.isSuccess == true {
-                await authContext.refreshAuth()
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            await authContext.refreshAuth()
         }
     }
 

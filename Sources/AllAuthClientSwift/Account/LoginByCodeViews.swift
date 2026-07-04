@@ -70,17 +70,12 @@ public struct RequestLoginCodeView: View {
     }
 
     private func requestCode() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "request login code") {
+            try await client.requestLoginCode(email: email)
+        }
 
-        do {
-            response = try await client.requestLoginCode(email: email)
-
-            if response?.isSuccess == true {
-                codeSent = true
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            codeSent = true
         }
     }
 }
@@ -135,18 +130,13 @@ public struct ConfirmLoginCodeView: View {
     }
 
     private func confirmCode() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "confirm login code") {
+            try await client.confirmLoginCode(code: code)
+        }
 
-        do {
-            response = try await client.confirmLoginCode(code: code)
-
-            if response?.isSuccess == true {
-                // Login successful, navigation handled by auth context
-                await authContext.refreshAuth()
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            // Login successful, navigation handled by auth context
+            await authContext.refreshAuth()
         }
     }
 }

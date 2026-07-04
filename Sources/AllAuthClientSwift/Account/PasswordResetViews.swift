@@ -60,17 +60,12 @@ public struct RequestPasswordResetView: View {
     }
 
     private func requestReset() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "request password reset") {
+            try await client.requestPasswordReset(email: email)
+        }
 
-        do {
-            response = try await client.requestPasswordReset(email: email)
-
-            if response?.isSuccess == true {
-                emailSent = true
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            emailSent = true
         }
     }
 }
@@ -219,23 +214,18 @@ public struct ResetPasswordView: View {
             return
         }
 
-        isLoading = true
-        defer { isLoading = false }
+        guard let resetKey = key else {
+            response = JSON(["errors": [["message": "Missing reset key"]]])
+            return
+        }
 
-        do {
-            guard let resetKey = key else {
-                response = JSON(["errors": [["message": "Missing reset key"]]])
-                return
-            }
+        response = await performRequest(loading: $isLoading, context: "reset password") {
+            try await client.resetPassword(key: resetKey, password: password)
+        }
 
-            response = try await client.resetPassword(key: resetKey, password: password)
-
-            if response?.isSuccess == true {
-                // Password reset successful, navigate to login
-                navigationManager.navigate(to: .login)
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            // Password reset successful, navigate to login
+            navigationManager.navigate(to: .login)
         }
     }
 }

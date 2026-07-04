@@ -1,4 +1,5 @@
 import Foundation
+import CoreImage.CIFilterBuiltins
 import SwiftUI
 import SwiftyJSON
 
@@ -66,7 +67,7 @@ public struct ActivateTOTPView: View {
                     .multilineTextAlignment(.center)
             }
 
-            // QR Code placeholder - in a real app, generate QR from totpUri
+            // QR code generated from the otpauth URI
             if let uri = totpUri {
                 QRCodeView(content: uri)
                     .frame(width: 200, height: 200)
@@ -114,38 +115,26 @@ public struct ActivateTOTPView: View {
     }
 
     var successView: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.green)
-
-            Text("Authenticator Enabled!")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Two-factor authentication is now enabled for your account.")
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-
-            PrimaryButton(title: "Continue", isLoading: false) {
-                dismiss()
-            }
+        StatusView(
+            icon: "checkmark.circle.fill",
+            color: .green,
+            title: "Authenticator Enabled!",
+            message: "Two-factor authentication is now enabled for your account.",
+            buttonTitle: "Continue"
+        ) {
+            dismiss()
         }
     }
 
     var errorView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.red)
-
-            Text("Failed to Load")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            PrimaryButton(title: "Try Again", isLoading: false) {
-                Task { await loadTOTPData() }
-            }
+        StatusView(
+            icon: "exclamationmark.triangle.fill",
+            color: .red,
+            title: "Failed to Load",
+            spacing: 16,
+            buttonTitle: "Try Again"
+        ) {
+            await loadTOTPData()
         }
     }
 
@@ -156,22 +145,21 @@ public struct ActivateTOTPView: View {
         do {
             totpData = try await client.getTOTPAuthenticator()
         } catch {
-            print("Failed to load TOTP data: \(error)")
+            AuthDiagnostics.log(
+                "ActivateTOTPView",
+                "failed to load TOTP data",
+                metadata: ["error": "\(error)"]
+            )
         }
     }
 
     private func activateTOTP() async {
-        isActivating = true
-        defer { isActivating = false }
+        response = await performRequest(loading: $isActivating, context: "activate TOTP") {
+            try await client.activateTOTP(code: code)
+        }
 
-        do {
-            response = try await client.activateTOTP(code: code)
-
-            if response?.isSuccess == true {
-                showSuccess = true
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            showSuccess = true
         }
     }
 }
@@ -222,17 +210,59 @@ public struct DeactivateTOTPView: View {
     }
 
     private func deactivateTOTP() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "deactivate TOTP") {
+            try await client.deactivateTOTP()
+        }
 
-        do {
-            response = try await client.deactivateTOTP()
+        if response?.isSuccess == true {
+            dismiss()
+        }
+    }
+}
 
-            if response?.isSuccess == true {
-                dismiss()
+// MARK: - TOTP Code Form
+
+/// Shared form for the TOTP authenticate/reauthenticate flows
+struct TOTPCodeForm<Footer: View>: View {
+    let title: String
+    let subtitle: String
+    let navigationTitle: String
+    let submit: @MainActor (String) async throws -> JSON
+    let onSuccess: @MainActor () async -> Void
+    @ViewBuilder let footer: () -> Footer
+
+    @State private var code = ""
+    @State private var isLoading = false
+    @State private var response: JSON?
+
+    var body: some View {
+        AuthForm(
+            title: title,
+            subtitle: subtitle
+        ) {
+            VStack(spacing: 16) {
+                CodeField(text: $code, errors: response)
+
+                FormErrors(errors: response)
+
+                PrimaryButton(title: "Verify", isLoading: isLoading) {
+                    await verify()
+                }
+
+                footer()
             }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        }
+        .navigationTitle(navigationTitle)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func verify() async {
+        response = await performRequest(loading: $isLoading, context: "verify TOTP code") {
+            try await submit(code)
+        }
+
+        if response?.isSuccess == true {
+            await onSuccess()
         }
     }
 }
@@ -245,58 +275,34 @@ public struct AuthenticateTOTPView: View {
     @EnvironmentObject var authContext: AuthContext
     @EnvironmentObject var navigationManager: AuthNavigationManager
 
-    @State private var code = ""
-    @State private var isLoading = false
-    @State private var response: JSON?
-
     private let client = AllAuthClient.shared
 
     public var body: some View {
-        AuthForm(
+        TOTPCodeForm(
             title: "Two-Factor Authentication",
-            subtitle: "Enter the code from your authenticator app."
-        ) {
-            VStack(spacing: 16) {
-                CodeField(text: $code, errors: response)
-
-                FormErrors(errors: response)
-
-                PrimaryButton(title: "Verify", isLoading: isLoading) {
-                    await authenticate()
-                }
-
-                // Alternative methods
-                VStack(spacing: 8) {
-                    if authContext.availableMFATypes.contains(AuthenticatorType.recoveryCodes.rawValue) {
-                        LinkButton(title: "Use recovery code instead") {
-                            navigationManager.navigate(to: .mfaAuthenticate)
-                        }
-                    }
-
-                    if authContext.availableMFATypes.contains(AuthenticatorType.webauthn.rawValue) {
-                        LinkButton(title: "Use security key instead") {
-                            // Navigate to WebAuthn auth
-                        }
-                    }
-                }
-            }
-        }
-        .navigationTitle("Verify")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func authenticate() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            response = try await client.authenticateTOTP(code: code)
-
-            if response?.isSuccess == true {
+            subtitle: "Enter the code from your authenticator app.",
+            navigationTitle: "Verify",
+            submit: { code in
+                try await client.authenticateTOTP(code: code)
+            },
+            onSuccess: {
                 await authContext.refreshAuth()
             }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        ) {
+            // Alternative methods
+            VStack(spacing: 8) {
+                if authContext.availableMFATypes.contains(AuthenticatorType.recoveryCodes.rawValue) {
+                    LinkButton(title: "Use recovery code instead") {
+                        navigationManager.navigate(to: .mfaAuthenticate)
+                    }
+                }
+
+                if authContext.availableMFATypes.contains(AuthenticatorType.webauthn.rawValue) {
+                    LinkButton(title: "Use security key instead") {
+                        // Navigate to WebAuthn auth
+                    }
+                }
+            }
         }
     }
 }
@@ -309,81 +315,85 @@ public struct ReauthenticateTOTPView: View {
     @EnvironmentObject var authContext: AuthContext
     @EnvironmentObject var navigationManager: AuthNavigationManager
 
-    @State private var code = ""
-    @State private var isLoading = false
-    @State private var response: JSON?
-
     private let client = AllAuthClient.shared
 
     public var body: some View {
-        AuthForm(
+        TOTPCodeForm(
             title: "Verify Your Identity",
-            subtitle: "Enter the code from your authenticator app to continue."
-        ) {
-            VStack(spacing: 16) {
-                CodeField(text: $code, errors: response)
-
-                FormErrors(errors: response)
-
-                PrimaryButton(title: "Verify", isLoading: isLoading) {
-                    await reauthenticate()
-                }
-
-                LinkButton(title: "Cancel") {
-                    navigationManager.pop()
-                }
-            }
-        }
-        .navigationTitle("Verify Identity")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func reauthenticate() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            response = try await client.reauthenticateTOTP(code: code)
-
-            if response?.isSuccess == true {
+            subtitle: "Enter the code from your authenticator app to continue.",
+            navigationTitle: "Verify Identity",
+            submit: { code in
+                try await client.reauthenticateTOTP(code: code)
+            },
+            onSuccess: {
                 await authContext.refreshAuth()
                 navigationManager.pop()
             }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        ) {
+            LinkButton(title: "Cancel") {
+                navigationManager.pop()
+            }
         }
     }
 }
 
 // MARK: - QR Code View
 
-/// Simple QR code display view
-/// In production, you would use a QR code generation library
+/// Displays a QR code generated from the given content string
 public struct QRCodeView: View {
     let content: String
 
+    private let qrImage: UIImage?
+
+    public init(content: String) {
+        self.content = content
+        self.qrImage = Self.generateQRCode(from: content)
+    }
 
     public var body: some View {
-        // Placeholder - in production, generate actual QR code
-        // using CoreImage CIQRCodeGenerator or a library
         ZStack {
             RoundedRectangle(cornerRadius: 8)
                 .fill(Color.white)
 
-            VStack(spacing: 8) {
-                Image(systemName: "qrcode")
-                    .font(.system(size: 100))
-                    .foregroundColor(.black)
+            if let qrImage {
+                Image(uiImage: qrImage)
+                    .interpolation(.none)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(12)
+            } else {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 40))
+                        .foregroundColor(.gray)
 
-                Text("QR Code")
-                    .font(.caption)
-                    .foregroundColor(.gray)
+                    Text("Unable to generate QR code")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
             }
         }
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
         )
+    }
+
+    private static func generateQRCode(from string: String) -> UIImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(string.utf8)
+        filter.correctionLevel = "M"
+
+        guard let outputImage = filter.outputImage else {
+            return nil
+        }
+
+        // Scale up so the code stays crisp when resized by SwiftUI
+        let scaled = outputImage.transformed(by: CGAffineTransform(scaleX: 10, y: 10))
+        guard let cgImage = CIContext().createCGImage(scaled, from: scaled.extent) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 }
 

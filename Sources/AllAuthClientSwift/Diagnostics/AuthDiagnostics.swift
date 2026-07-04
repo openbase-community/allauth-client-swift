@@ -81,12 +81,53 @@ public enum AuthDiagnostics {
         }
     }
 
-    public static func redactSensitiveText(_ value: String) -> String {
-        value
+    /// Key suffixes whose values must never appear in logs (covers
+    /// access_token, refresh_token, session_token, password, secret, key, ...)
+    private static let sensitiveKeySuffixes = ["password", "secret", "key", "token"]
+    private static let sensitiveKeyPattern = "(?:password|secret|key|token)"
+
+    static func isSensitiveKey(_ name: String) -> Bool {
+        let lowered = name.lowercased()
+        return sensitiveKeySuffixes.contains { lowered.hasSuffix($0) }
     }
 
+    /// Mask values of sensitive keys in logged JSON or query/form text
+    public static func redactSensitiveText(_ value: String) -> String {
+        var redacted = value
+
+        // JSON-style pairs: "access_token": "..."
+        redacted = redacted.replacingOccurrences(
+            of: "(\"[\\w-]*\(sensitiveKeyPattern)\"\\s*:\\s*)\"[^\"]*\"",
+            with: "$1\"<redacted>\"",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        // Query/form-style pairs: access_token=...
+        redacted = redacted.replacingOccurrences(
+            of: "([\\w-]*\(sensitiveKeyPattern)=)[^&\\s\"]+",
+            with: "$1<redacted>",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        return redacted
+    }
+
+    /// Summarize an endpoint URL, masking sensitive query parameter values
     public static func endpointSummary(_ url: String) -> String {
-        url
+        guard var components = URLComponents(string: url) else {
+            return redactSensitiveText(url)
+        }
+
+        if let queryItems = components.queryItems, !queryItems.isEmpty {
+            components.queryItems = queryItems.map { item in
+                guard let value = item.value, !value.isEmpty, isSensitiveKey(item.name) else {
+                    return item
+                }
+                return URLQueryItem(name: item.name, value: "<redacted>")
+            }
+        }
+
+        return components.string ?? redactSensitiveText(url)
     }
 
     public static func tokenSummary(_ token: String?) -> String {

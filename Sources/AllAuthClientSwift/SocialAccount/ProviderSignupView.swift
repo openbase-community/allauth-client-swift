@@ -53,17 +53,12 @@ public struct ProviderSignupView: View {
     }
 
     private func completeSignup() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "complete provider signup") {
+            try await client.completeProviderSignup(email: email)
+        }
 
-        do {
-            response = try await client.completeProviderSignup(email: email)
-
-            if response?.isSuccess == true {
-                await authContext.refreshAuth()
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            await authContext.refreshAuth()
         }
     }
 }

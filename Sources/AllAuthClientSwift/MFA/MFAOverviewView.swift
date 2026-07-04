@@ -130,7 +130,7 @@ public struct MFAOverviewView: View {
                                 .foregroundColor(.purple)
                             VStack(alignment: .leading) {
                                 Text(authenticator["name"].stringValue)
-                                Text("Added \(formatDate(authenticator["created_at"].doubleValue))")
+                                Text("Added \(AuthDateFormatting.relativeDate(fromTimestamp: authenticator["created_at"].doubleValue))")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -173,25 +173,12 @@ public struct MFAOverviewView: View {
     }
 
     private func loadAuthenticators() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await client.getAuthenticators()
-            if result.isSuccess {
-                authenticators = result["data"].arrayValue
-            }
-        } catch {
-            print("Failed to load authenticators: \(error)")
+        let result = await performRequest(loading: $isLoading, context: "load authenticators") {
+            try await client.getAuthenticators()
         }
-    }
-
-    private func formatDate(_ timestamp: Double) -> String {
-        guard timestamp > 0 else { return "Unknown" }
-        let date = Date(timeIntervalSince1970: timestamp)
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+        if result.isSuccess {
+            authenticators = result["data"].arrayValue
+        }
     }
 }
 

@@ -76,35 +76,25 @@ public struct ChangeEmailView: View {
     }
 
     private func loadEmails() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await client.getEmailAddresses()
-            if result.isSuccess {
-                emailAddresses = result["data"].arrayValue
-            }
-        } catch {
-            print("Failed to load emails: \(error)")
+        let result = await performRequest(loading: $isLoading, context: "load emails") {
+            try await client.getEmailAddresses()
+        }
+        if result.isSuccess {
+            emailAddresses = result["data"].arrayValue
         }
     }
 
     private func addEmail() async {
-        isAddingEmail = true
-        defer { isAddingEmail = false }
+        response = await performRequest(loading: $isAddingEmail, context: "add email") {
+            try await client.addEmailAddress(email: newEmail)
+        }
 
-        do {
-            response = try await client.addEmailAddress(email: newEmail)
-
-            if response?.isSuccess == true {
-                newEmail = ""
-                response = nil
-                successMessage = "Email address added. Please check your inbox for verification."
-                showSuccess = true
-                await loadEmails()
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            newEmail = ""
+            response = nil
+            successMessage = "Email address added. Please check your inbox for verification."
+            showSuccess = true
+            await loadEmails()
         }
     }
 
@@ -117,7 +107,11 @@ public struct ChangeEmailView: View {
                 await loadEmails()
             }
         } catch {
-            print("Failed to set primary: \(error)")
+            AuthDiagnostics.log(
+                "ChangeEmailView",
+                "failed to set primary email",
+                metadata: ["error": "\(error)"]
+            )
         }
     }
 
@@ -129,7 +123,11 @@ public struct ChangeEmailView: View {
                 showSuccess = true
             }
         } catch {
-            print("Failed to request verification: \(error)")
+            AuthDiagnostics.log(
+                "ChangeEmailView",
+                "failed to request verification",
+                metadata: ["error": "\(error)"]
+            )
         }
     }
 
@@ -142,7 +140,11 @@ public struct ChangeEmailView: View {
                 await loadEmails()
             }
         } catch {
-            print("Failed to delete email: \(error)")
+            AuthDiagnostics.log(
+                "ChangeEmailView",
+                "failed to delete email",
+                metadata: ["error": "\(error)"]
+            )
         }
     }
 }

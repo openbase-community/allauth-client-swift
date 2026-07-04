@@ -86,16 +86,11 @@ public struct SessionsView: View {
     }
 
     private func loadSessions() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await client.getSessions()
-            if result.isSuccess {
-                sessions = result["data"].arrayValue
-            }
-        } catch {
-            print("Failed to load sessions: \(error)")
+        let result = await performRequest(loading: $isLoading, context: "load sessions") {
+            try await client.getSessions()
+        }
+        if result.isSuccess {
+            sessions = result["data"].arrayValue
         }
     }
 
@@ -106,7 +101,11 @@ public struct SessionsView: View {
                 _ = try await client.deleteSessions(ids: ids)
                 await loadSessions()
             } catch {
-                print("Failed to delete sessions: \(error)")
+                AuthDiagnostics.log(
+                    "SessionsView",
+                    "failed to delete sessions",
+                    metadata: ["error": "\(error)"]
+                )
             }
         }
     }
@@ -119,7 +118,11 @@ public struct SessionsView: View {
             _ = try await client.deleteSessions(ids: otherIds)
             await loadSessions()
         } catch {
-            print("Failed to sign out all: \(error)")
+            AuthDiagnostics.log(
+                "SessionsView",
+                "failed to sign out other sessions",
+                metadata: ["error": "\(error)"]
+            )
         }
     }
 }

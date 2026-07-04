@@ -104,16 +104,11 @@ public struct ManageProvidersView: View {
     }
 
     private func loadProviders() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let result = try await client.getProviders()
-            if result.isSuccess {
-                connectedProviders = result["data"].arrayValue
-            }
-        } catch {
-            print("Failed to load providers: \(error)")
+        let result = await performRequest(loading: $isLoading, context: "load providers") {
+            try await client.getProviders()
+        }
+        if result.isSuccess {
+            connectedProviders = result["data"].arrayValue
         }
     }
 
@@ -130,7 +125,11 @@ public struct ManageProvidersView: View {
                 await loadProviders()
             }
         } catch {
-            print("Failed to disconnect: \(error)")
+            AuthDiagnostics.log(
+                "ManageProvidersView",
+                "failed to disconnect provider",
+                metadata: ["error": "\(error)"]
+            )
         }
     }
 

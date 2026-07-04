@@ -38,18 +38,13 @@ public struct ReauthenticateView: View {
     }
 
     private func reauthenticate() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "reauthenticate") {
+            try await client.reauthenticate(password: password)
+        }
 
-        do {
-            response = try await client.reauthenticate(password: password)
-
-            if response?.isSuccess == true {
-                await authContext.refreshAuth()
-                navigationManager.pop()
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            await authContext.refreshAuth()
+            navigationManager.pop()
         }
     }
 }

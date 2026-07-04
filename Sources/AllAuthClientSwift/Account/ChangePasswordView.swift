@@ -80,22 +80,17 @@ public struct ChangePasswordView: View {
             return
         }
 
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
+        response = await performRequest(loading: $isLoading, context: "change password") {
             let currentPwd = requiresCurrentPassword ? currentPassword : nil
-            response = try await client.changePassword(currentPassword: currentPwd, newPassword: newPassword)
+            return try await client.changePassword(currentPassword: currentPwd, newPassword: newPassword)
+        }
 
-            if response?.isSuccess == true {
-                showSuccess = true
-                currentPassword = ""
-                newPassword = ""
-                newPasswordConfirm = ""
-                response = nil
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            showSuccess = true
+            currentPassword = ""
+            newPassword = ""
+            newPasswordConfirm = ""
+            response = nil
         }
     }
 }

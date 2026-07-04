@@ -40,6 +40,33 @@ public enum AuthChangeEvent: Equatable {
     case flowUpdated
 }
 
+public extension AuthChangeEvent {
+    /// Determine what type of auth change occurred between two auth responses
+    static func detect(previous: JSON?, current: JSON?) -> AuthChangeEvent? {
+        let wasAuthenticated = previous?.isAuthenticated ?? false
+        let isNowAuthenticated = current?.isAuthenticated ?? false
+        let currentStatus = current?["status"].intValue ?? 0
+
+        if !wasAuthenticated && isNowAuthenticated && currentStatus == 200 {
+            return .loggedIn
+        }
+
+        if wasAuthenticated && !isNowAuthenticated && currentStatus == 401 {
+            return .loggedOut
+        }
+
+        if current?.requiresReauthentication == true {
+            return .reauthenticationRequired
+        }
+
+        if currentStatus == 200 && current?["data"]["flows"].exists() == true {
+            return .flowUpdated
+        }
+
+        return nil
+    }
+}
+
 public enum AllAuthError: LocalizedError {
     case invalidURL
     case invalidResponse
@@ -69,6 +96,19 @@ public extension JSON {
     /// Check if authentication is required
     var requiresAuth: Bool {
         return self["status"].intValue == 401
+    }
+
+    /// Check if the response contains a (mfa) reauthentication flow
+    var hasReauthenticationFlow: Bool {
+        return self["data"]["flows"].arrayValue.contains { flow in
+            flow["id"].string == AuthFlow.reauthenticate.rawValue ||
+                flow["id"].string == AuthFlow.mfaReauthenticate.rawValue
+        }
+    }
+
+    /// Check if the response indicates the user must reauthenticate
+    var requiresReauthentication: Bool {
+        return self["status"].intValue == 401 && hasReauthenticationFlow
     }
 
     /// Check if there are pending flows

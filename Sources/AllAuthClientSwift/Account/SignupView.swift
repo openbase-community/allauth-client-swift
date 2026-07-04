@@ -61,18 +61,13 @@ public struct SignupView: View {
             return
         }
 
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
+        response = await performRequest(loading: $isLoading, context: "sign up") {
             let usernameParam = authContext.usernameAuthEnabled ? username : nil
-            response = try await client.signUp(email: email, password: password, username: usernameParam)
+            return try await client.signUp(email: email, password: password, username: usernameParam)
+        }
 
-            if response?.isSuccess == true {
-                // Navigation handled by auth context observer
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            // Navigation handled by auth context observer
         }
     }
 }

@@ -32,16 +32,7 @@ public class AuthContext: ObservableObject {
 
     /// Whether reauthentication is required
     public var requiresReauthentication: Bool {
-        guard let auth = auth else { return false }
-        let status = auth["status"].intValue
-        if status == 401 {
-            let flows = auth["data"]["flows"].arrayValue
-            return flows.contains { flow in
-                flow["id"].string == AuthFlow.reauthenticate.rawValue ||
-                flow["id"].string == AuthFlow.mfaReauthenticate.rawValue
-            }
-        }
-        return false
+        return auth?.requiresReauthentication ?? false
     }
 
     /// Current user data
@@ -235,33 +226,6 @@ extension AuthContext {
 extension AuthContext {
     /// Determine what type of auth change occurred
     public func detectAuthChange(from previousAuth: JSON?, to currentAuth: JSON?) -> AuthChangeEvent? {
-        let wasAuthenticated = previousAuth?["meta"]["is_authenticated"].bool ?? false
-        let isNowAuthenticated = currentAuth?["meta"]["is_authenticated"].bool ?? false
-        let currentStatus = currentAuth?["status"].intValue ?? 0
-
-        if !wasAuthenticated && isNowAuthenticated && currentStatus == 200 {
-            return .loggedIn
-        }
-
-        if wasAuthenticated && !isNowAuthenticated && currentStatus == 401 {
-            return .loggedOut
-        }
-
-        if currentStatus == 401 {
-            let flows = currentAuth?["data"]["flows"].arrayValue ?? []
-            let hasReauthFlow = flows.contains { flow in
-                flow["id"].string == AuthFlow.reauthenticate.rawValue ||
-                flow["id"].string == AuthFlow.mfaReauthenticate.rawValue
-            }
-            if hasReauthFlow {
-                return .reauthenticationRequired
-            }
-        }
-
-        if currentStatus == 200 && currentAuth?["data"]["flows"].exists() == true {
-            return .flowUpdated
-        }
-
-        return nil
+        return AuthChangeEvent.detect(previous: previousAuth, current: currentAuth)
     }
 }

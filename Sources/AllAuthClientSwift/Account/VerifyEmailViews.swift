@@ -60,27 +60,18 @@ public struct VerifyEmailView: View {
                     }
 
                 case .success:
-                    VStack(spacing: 16) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.green)
-
-                        Text("Email Verified!")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-
-                        Text("Your email address has been verified successfully.")
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-
+                    StatusView(
+                        icon: "checkmark.circle.fill",
+                        color: .green,
+                        title: "Email Verified!",
+                        message: "Your email address has been verified successfully.",
+                        spacing: 16,
+                        buttonTitle: authContext.isAuthenticated ? "Continue" : "Sign In"
+                    ) {
                         if authContext.isAuthenticated {
-                            PrimaryButton(title: "Continue", isLoading: false) {
-                                navigationManager.popToRoot()
-                            }
+                            navigationManager.popToRoot()
                         } else {
-                            PrimaryButton(title: "Sign In", isLoading: false) {
-                                navigationManager.navigate(to: .login)
-                            }
+                            navigationManager.navigate(to: .login)
                         }
                     }
 
@@ -111,25 +102,18 @@ public struct VerifyEmailView: View {
                     }
 
                 case .alreadyVerified:
-                    VStack(spacing: 16) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.green)
-
-                        Text("Already Verified")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-
-                        Text("This email address has already been verified.")
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-
-                        PrimaryButton(title: "Continue", isLoading: false) {
-                            if authContext.isAuthenticated {
-                                navigationManager.popToRoot()
-                            } else {
-                                navigationManager.navigate(to: .login)
-                            }
+                    StatusView(
+                        icon: "checkmark.seal.fill",
+                        color: .green,
+                        title: "Already Verified",
+                        message: "This email address has already been verified.",
+                        spacing: 16,
+                        buttonTitle: "Continue"
+                    ) {
+                        if authContext.isAuthenticated {
+                            navigationManager.popToRoot()
+                        } else {
+                            navigationManager.navigate(to: .login)
                         }
                     }
                 }
@@ -168,21 +152,15 @@ public struct VerifyEmailView: View {
     private func verifyEmail() async {
         guard let key = key else { return }
 
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "verify email") {
+            try await client.verifyEmail(key: key)
+        }
 
-        do {
-            response = try await client.verifyEmail(key: key)
-
-            if response?.isSuccess == true {
-                verificationStatus = .success
-                await authContext.refreshAuth()
-            } else {
-                verificationStatus = .failed
-            }
-        } catch {
+        if response?.isSuccess == true {
+            verificationStatus = .success
+            await authContext.refreshAuth()
+        } else {
             verificationStatus = .failed
-            response = JSON(["errors": [["message": error.localizedDescription]]])
         }
     }
 }
@@ -221,18 +199,13 @@ public struct VerifyEmailByCodeView: View {
     }
 
     private func verifyCode() async {
-        isLoading = true
-        defer { isLoading = false }
+        response = await performRequest(loading: $isLoading, context: "verify email code") {
+            try await client.verifyEmail(key: code)
+        }
 
-        do {
-            response = try await client.verifyEmail(key: code)
-
-            if response?.isSuccess == true {
-                await authContext.refreshAuth()
-                // Navigation handled by auth state change
-            }
-        } catch {
-            response = JSON(["errors": [["message": error.localizedDescription]]])
+        if response?.isSuccess == true {
+            await authContext.refreshAuth()
+            // Navigation handled by auth state change
         }
     }
 }
