@@ -13,7 +13,13 @@ public struct LogoutView: View {
 
     private let client = AllAuthClient.shared
 
-    public init() {}
+    /// Called after a successful logout, before the view dismisses. Lets the
+    /// host app reset device-local state so sign-out means a full reset.
+    private let onLoggedOut: (() -> Void)?
+
+    public init(onLoggedOut: (() -> Void)? = nil) {
+        self.onLoggedOut = onLoggedOut
+    }
 
     public var body: some View {
         VStack(spacing: 24) {
@@ -55,6 +61,7 @@ public struct LogoutView: View {
         do {
             _ = try await client.logout()
             authContext.clearAuth()
+            onLoggedOut?()
         } catch {
             self.error = error.localizedDescription
         }

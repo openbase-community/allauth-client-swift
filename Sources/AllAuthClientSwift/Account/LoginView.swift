@@ -12,6 +12,8 @@ public struct LoginView: View {
     @State private var email = ""
     @State private var username = ""
     @State private var password = ""
+    @State private var hasSavedPassword = false
+    @State private var isFillingPassword = false
     @State private var isLoading = false
     @State private var response: JSON?
 
@@ -40,7 +42,24 @@ public struct LoginView: View {
                     UsernameField(text: $username, errors: response)
                 }
 
-                PasswordField(text: $password, errors: response)
+                HStack(spacing: 8) {
+                    PasswordField(text: $password, errors: response)
+
+                    if hasSavedPassword {
+                        Button {
+                            fillSavedPassword()
+                        } label: {
+                            if isFillingPassword {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "key.fill")
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(isFillingPassword)
+                        .accessibilityLabel("Fill saved password")
+                    }
+                }
 
                 // General errors
                 FormErrors(errors: response)
@@ -156,13 +175,20 @@ public struct LoginView: View {
             }
         }
 
+        // The saved password sits behind a user-presence Keychain prompt;
+        // never read it automatically. Offer the fill button instead.
+        hasSavedPassword = credentialStore.hasSavedPassword
+    }
+
+    private func fillSavedPassword() {
+        isFillingPassword = true
         Task {
             let savedPassword = await credentialStore.loadPassword()
             await MainActor.run {
-                guard password.isEmpty else {
-                    return
+                if !savedPassword.isEmpty {
+                    password = savedPassword
                 }
-                password = savedPassword
+                isFillingPassword = false
             }
         }
     }
@@ -193,6 +219,12 @@ private struct LoginCredentialStore {
         let identifier = UserDefaults.standard.string(forKey: identifierKey) ?? ""
         let identifierKind = UserDefaults.standard.string(forKey: identifierKindKey).flatMap(LoginIdentifierKind.init(rawValue:))
         return (identifier, identifierKind)
+    }
+
+    /// Attribute-only Keychain check: does not trigger the presence prompt.
+    var hasSavedPassword: Bool {
+        KeychainHelper.exists(key: protectedPasswordKey)
+            || KeychainHelper.exists(key: legacyPasswordKey)
     }
 
     func loadPassword() async -> String {
