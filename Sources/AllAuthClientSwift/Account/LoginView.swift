@@ -20,14 +20,17 @@ public struct LoginView: View {
     private let client = AllAuthClient.shared
     private let onShake: (() -> Void)?
     private let onSocialProviderSelected: SocialProviderSelectionHandler?
+    private let onBack: (() -> Void)?
     private let credentialStore = LoginCredentialStore()
 
     public init(
         onShake: (() -> Void)? = nil,
-        onSocialProviderSelected: SocialProviderSelectionHandler? = nil
+        onSocialProviderSelected: SocialProviderSelectionHandler? = nil,
+        onBack: (() -> Void)? = nil
     ) {
         self.onShake = onShake
         self.onSocialProviderSelected = onSocialProviderSelected
+        self.onBack = onBack
     }
 
     public var body: some View {
@@ -110,6 +113,18 @@ public struct LoginView: View {
         }
         .navigationTitle("Sign In")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let onBack {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        onBack()
+                    } label: {
+                        Label("Back", systemImage: "chevron.backward")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+            }
+        }
         .onAppear {
             loadSavedCredentials()
         }

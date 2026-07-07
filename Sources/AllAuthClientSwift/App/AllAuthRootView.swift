@@ -10,10 +10,12 @@ public struct AllAuthRootView<AuthenticatedContent: View>: View {
     private let authenticatedContent: () -> AuthenticatedContent
     private let onLoginShake: (() -> Void)?
     private let onSocialProviderSelected: SocialProviderSelectionHandler?
+    private let onLoginBack: (() -> Void)?
 
     public init(
         onLoginShake: (() -> Void)? = nil,
         onSocialProviderSelected: SocialProviderSelectionHandler? = nil,
+        onLoginBack: (() -> Void)? = nil,
         @ViewBuilder authenticatedContent: @escaping () -> AuthenticatedContent
     ) {
         let context = AuthContext.shared
@@ -21,6 +23,7 @@ public struct AllAuthRootView<AuthenticatedContent: View>: View {
         self.authenticatedContent = authenticatedContent
         self.onLoginShake = onLoginShake
         self.onSocialProviderSelected = onSocialProviderSelected
+        self.onLoginBack = onLoginBack
     }
 
     public var body: some View {
@@ -33,7 +36,8 @@ public struct AllAuthRootView<AuthenticatedContent: View>: View {
             } else {
                 AllAuthUnauthenticatedRootView(
                     onLoginShake: onLoginShake,
-                    onSocialProviderSelected: onSocialProviderSelected
+                    onSocialProviderSelected: onSocialProviderSelected,
+                    onLoginBack: onLoginBack
                 )
             }
         }
@@ -73,13 +77,16 @@ public struct AllAuthUnauthenticatedRootView: View {
 
     private let onLoginShake: (() -> Void)?
     private let onSocialProviderSelected: SocialProviderSelectionHandler?
+    private let onLoginBack: (() -> Void)?
 
     public init(
         onLoginShake: (() -> Void)? = nil,
-        onSocialProviderSelected: SocialProviderSelectionHandler? = nil
+        onSocialProviderSelected: SocialProviderSelectionHandler? = nil,
+        onLoginBack: (() -> Void)? = nil
     ) {
         self.onLoginShake = onLoginShake
         self.onSocialProviderSelected = onSocialProviderSelected
+        self.onLoginBack = onLoginBack
     }
 
     public var body: some View {
@@ -108,7 +115,8 @@ public struct AllAuthUnauthenticatedRootView: View {
         } else {
             LoginView(
                 onShake: onLoginShake,
-                onSocialProviderSelected: onSocialProviderSelected
+                onSocialProviderSelected: onSocialProviderSelected,
+                onBack: onLoginBack
             )
         }
     }
