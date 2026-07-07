@@ -17,7 +17,15 @@ public struct LogoutView: View {
     /// host app reset device-local state so sign-out means a full reset.
     private let onLoggedOut: (() -> Void)?
 
-    public init(onLoggedOut: (() -> Void)? = nil) {
+    /// Called before the logout request, while auth is still valid. Lets the
+    /// host app perform authenticated cleanup (e.g. deregister this device).
+    private let beforeLogout: (() async -> Void)?
+
+    public init(
+        beforeLogout: (() async -> Void)? = nil,
+        onLoggedOut: (() -> Void)? = nil
+    ) {
+        self.beforeLogout = beforeLogout
         self.onLoggedOut = onLoggedOut
     }
 
@@ -59,6 +67,7 @@ public struct LogoutView: View {
         defer { isLoading = false }
 
         do {
+            await beforeLogout?()
             _ = try await client.logout()
             authContext.clearAuth()
             onLoggedOut?()
