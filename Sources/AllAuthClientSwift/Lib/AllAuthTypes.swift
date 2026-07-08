@@ -59,7 +59,7 @@ public extension AuthChangeEvent {
             return .reauthenticationRequired
         }
 
-        if currentStatus == 200 && current?["data"]["flows"].exists() == true {
+        if current?.hasPendingFlows == true {
             return .flowUpdated
         }
 
@@ -121,6 +121,12 @@ public extension JSON {
         return self["data"]["flows"].arrayValue.first {
             $0["id"].string == type.rawValue && $0["is_pending"].boolValue
         }
+    }
+
+    /// Check whether allauth accepted a login-code request and is waiting for
+    /// the user to enter the emailed one-time code.
+    var isLoginCodePending: Bool {
+        return self["status"].intValue == 401 && pendingFlow(of: .loginByCode) != nil
     }
 
     /// Get all errors

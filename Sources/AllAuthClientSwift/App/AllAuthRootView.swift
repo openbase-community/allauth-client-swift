@@ -102,6 +102,8 @@ public struct AllAuthUnauthenticatedRootView: View {
     private var initialView: some View {
         if authContext.isPending(flow: .verifyEmail) {
             VerificationEmailSentView()
+        } else if authContext.isPending(flow: .loginByCode) {
+            ConfirmLoginCodeView()
         } else if authContext.isPending(flow: .mfaAuthenticate) {
             MFAAuthenticateFlowView()
         } else if authContext.isPending(flow: .mfaReauthenticate) {

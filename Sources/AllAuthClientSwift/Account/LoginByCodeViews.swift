@@ -74,7 +74,7 @@ public struct RequestLoginCodeView: View {
             try await client.requestLoginCode(email: email)
         }
 
-        if response?.isSuccess == true {
+        if response?.isSuccess == true || response?.isLoginCodePending == true {
             codeSent = true
         }
     }
@@ -137,6 +137,9 @@ public struct ConfirmLoginCodeView: View {
         if response?.isSuccess == true {
             // Login successful, navigation handled by auth context
             await authContext.refreshAuth()
+        } else if response?["status"].intValue == 409 {
+            navigationManager.popToRoot()
+            navigationManager.navigate(to: .requestLoginCode)
         }
     }
 }

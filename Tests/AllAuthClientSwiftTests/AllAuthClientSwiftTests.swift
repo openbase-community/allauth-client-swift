@@ -29,6 +29,24 @@ import SwiftyJSON
     #expect(AuthChangeEvent.detect(previous: current, current: current) == .reauthenticationRequired)
 }
 
+@Test func detectsPendingLoginCodeFlow() {
+    let previous = JSON(["status": 401, "meta": ["is_authenticated": false]])
+    let current = JSON([
+        "status": 401,
+        "meta": ["is_authenticated": false],
+        "data": [
+            "flows": [
+                ["id": "login", "is_pending": false],
+                ["id": "login_by_code", "is_pending": true],
+            ],
+        ],
+    ])
+
+    #expect(current.isLoginCodePending)
+    #expect(current.hasPendingFlows)
+    #expect(AuthChangeEvent.detect(previous: previous, current: current) == .flowUpdated)
+}
+
 @Test func redactsSensitiveText() {
     let text = "{\"access_token\": \"abc123\", \"status\": 200, \"password\": \"hunter2\"}"
     let redacted = AuthDiagnostics.redactSensitiveText(text)
