@@ -48,11 +48,13 @@ import SwiftyJSON
 }
 
 @Test func redactsSensitiveText() {
-    let text = "{\"access_token\": \"abc123\", \"status\": 200, \"password\": \"hunter2\"}"
+    let text = "{\"access_token\": \"abc123\", \"status\": 200, \"password\": \"hunter2\", \"email\": \"gabe@example.com\"}"
     let redacted = AuthDiagnostics.redactSensitiveText(text)
     #expect(!redacted.contains("abc123"))
     #expect(!redacted.contains("hunter2"))
+    #expect(!redacted.contains("gabe@example.com"))
     #expect(redacted.contains("<redacted>"))
+    #expect(redacted.contains("<redacted-email>"))
     #expect(redacted.contains("\"status\": 200"))
 }
 
@@ -62,4 +64,25 @@ import SwiftyJSON
     )
     #expect(!summary.contains("abc123"))
     #expect(summary.contains("passwordless"))
+}
+
+@Test func authDiagnosticsRetainsSanitizedEntriesWhenVerboseLoggingDisabled() {
+    AuthDiagnostics.setEnabled(false)
+    AuthDiagnostics.clearBufferedEntries()
+    defer {
+        AuthDiagnostics.clearBufferedEntries()
+        AuthDiagnostics.setEnabled(false)
+    }
+
+    AuthDiagnostics.log(
+        "DiagnosticsTest",
+        "request finished for gabe@example.com",
+        metadata: ["authorization": "Bearer abcdefghijklmnop"]
+    )
+
+    let entries = AuthDiagnostics.recentEntries()
+    #expect(entries.count == 1)
+    #expect(entries[0].metadata["authorization"] == "<redacted>")
+    #expect(!entries[0].line.contains("gabe@example.com"))
+    #expect(!entries[0].line.contains("Bearer abcdefghijklmnop"))
 }

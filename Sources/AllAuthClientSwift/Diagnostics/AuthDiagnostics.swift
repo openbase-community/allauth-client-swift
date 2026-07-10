@@ -29,29 +29,31 @@ public enum AuthDiagnostics {
     }
 
     public static func log(_ component: String, _ message: String, metadata: [String: String] = [:]) {
-        guard isEnabled else {
-            return
-        }
+        let redactedMessage = redactSensitiveText(message)
+        let redactedMetadata = redactedMetadata(metadata)
 
-        let renderedMetadata = metadata
+        let renderedMetadata = redactedMetadata
             .sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value)" }
             .joined(separator: " ")
 
         let line: String
         if renderedMetadata.isEmpty {
-            line = "[AuthDiagnostics][\(component)] \(message)"
+            line = "[AuthDiagnostics][\(component)] \(redactedMessage)"
         } else {
-            line = "[AuthDiagnostics][\(component)] \(message) \(renderedMetadata)"
+            line = "[AuthDiagnostics][\(component)] \(redactedMessage) \(renderedMetadata)"
         }
-        print(line)
+
+        if isEnabled {
+            print(line)
+        }
 
         append(
             Entry(
                 timestamp: isoTimestamp(),
                 component: component,
-                message: message,
-                metadata: metadata,
+                message: redactedMessage,
+                metadata: redactedMetadata,
                 line: line
             )
         )
@@ -84,11 +86,13 @@ public enum AuthDiagnostics {
     /// Key suffixes whose values must never appear in logs (covers
     /// access_token, refresh_token, session_token, password, secret, key, ...)
     private static let sensitiveKeySuffixes = ["password", "secret", "key", "token"]
+    private static let sensitiveKeyNames = ["authorization", "x-session-token"]
     private static let sensitiveKeyPattern = "(?:password|secret|key|token)"
 
     static func isSensitiveKey(_ name: String) -> Bool {
         let lowered = name.lowercased()
-        return sensitiveKeySuffixes.contains { lowered.hasSuffix($0) }
+        return sensitiveKeyNames.contains(lowered)
+            || sensitiveKeySuffixes.contains { lowered.hasSuffix($0) }
     }
 
     /// Mask values of sensitive keys in logged JSON or query/form text
@@ -106,6 +110,12 @@ public enum AuthDiagnostics {
         redacted = redacted.replacingOccurrences(
             of: "([\\w-]*\(sensitiveKeyPattern)=)[^&\\s\"]+",
             with: "$1<redacted>",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        redacted = redacted.replacingOccurrences(
+            of: "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}",
+            with: "<redacted-email>",
             options: [.regularExpression, .caseInsensitive]
         )
 
@@ -182,6 +192,14 @@ public enum AuthDiagnostics {
             return "none"
         }
         return "keys=\(data.keys.sorted().joined(separator: ","))"
+    }
+
+    private static func redactedMetadata(_ metadata: [String: String]) -> [String: String] {
+        var redacted: [String: String] = [:]
+        for (key, value) in metadata {
+            redacted[key] = isSensitiveKey(key) ? "<redacted>" : redactSensitiveText(value)
+        }
+        return redacted
     }
 
     private static func append(_ entry: Entry) {
