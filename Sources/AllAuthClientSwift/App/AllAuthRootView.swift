@@ -5,6 +5,7 @@ import SwiftyJSON
 /// Equivalent to Root.js in the React implementation
 public struct AllAuthRootView<AuthenticatedContent: View>: View {
     @EnvironmentObject var authContext: AuthContext
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var navigationManager: AuthNavigationManager
 
     private let authenticatedContent: () -> AuthenticatedContent
@@ -47,11 +48,31 @@ public struct AllAuthRootView<AuthenticatedContent: View>: View {
                 navigationManager.handleAuthChange(change)
             }
         }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                refreshPendingAuthOnForeground()
+            }
+        }
     }
 
     private var hasPendingMandatoryFlow: Bool {
         return authContext.isPending(flow: .verifyEmail) ||
             authContext.isPending(flow: .mfaAuthenticate)
+    }
+
+    /// Re-fetches auth state when the app returns to the foreground while a
+    /// login is stalled on a pending flow (e.g. the user left the app to
+    /// verify their email or fetch a login code), so the UI picks up any
+    /// server-side change instead of staying stuck until relaunch.
+    private func refreshPendingAuthOnForeground() {
+        guard !authContext.isLoading,
+              !authContext.isAuthenticated,
+              !authContext.pendingFlows.isEmpty
+        else { return }
+
+        Task {
+            await authContext.refreshAuth()
+        }
     }
 }
 

@@ -200,7 +200,7 @@ public struct VerifyEmailByCodeView: View {
 
     private func verifyCode() async {
         response = await performRequest(loading: $isLoading, context: "verify email code") {
-            try await client.verifyEmail(key: code)
+            try await client.verifyEmail(key: code.normalizedCode)
         }
 
         if response?.isSuccess == true {
@@ -217,6 +217,9 @@ public struct VerifyEmailByCodeView: View {
 public struct VerificationEmailSentView: View {
     @EnvironmentObject var authContext: AuthContext
     @EnvironmentObject var navigationManager: AuthNavigationManager
+
+    @State private var isCheckingVerification = false
+    @State private var stillPendingAfterCheck = false
 
     var email: String? {
         return authContext.user?["email"].string
@@ -254,14 +257,28 @@ public struct VerificationEmailSentView: View {
                 Divider()
 
                 VStack(spacing: 12) {
+                    PrimaryButton(title: "I've Verified My Email", isLoading: isCheckingVerification) {
+                        await checkVerification()
+                    }
+
+                    if stillPendingAfterCheck {
+                        Text("Not verified yet — if you haven't clicked the link, check your inbox or spam folder. Already clicked it? Sign in again to continue.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        SecondaryButton(title: "Back to Sign In", isLoading: false) {
+                            await signOut()
+                        }
+                    }
+
                     LinkButton(title: "Didn't receive it? Manage email addresses") {
                         navigationManager.navigate(to: .changeEmail)
                     }
 
                     LinkButton(title: "Sign out") {
                         Task {
-                            _ = try? await AllAuthClient.shared.logout()
-                            authContext.clearAuth()
+                            await signOut()
                         }
                     }
                 }
@@ -269,6 +286,29 @@ public struct VerificationEmailSentView: View {
         }
         .navigationTitle("Verify Email")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Re-checks the session's auth state. If the email was verified in a way
+    /// that completed this session's login, the auth change dismisses this
+    /// screen automatically; otherwise surface next steps inline.
+    private func checkVerification() async {
+        stillPendingAfterCheck = false
+        isCheckingVerification = true
+        defer { isCheckingVerification = false }
+
+        await authContext.refreshAuth()
+
+        if !authContext.isAuthenticated && authContext.isPending(flow: .verifyEmail) {
+            stillPendingAfterCheck = true
+        }
+    }
+
+    /// Clears the stalled pending-verification session so the user lands back
+    /// on the sign-in screen, where logging in succeeds once the email address
+    /// has been verified (e.g. via the link opened in a browser).
+    private func signOut() async {
+        _ = try? await AllAuthClient.shared.logout()
+        authContext.clearAuth()
     }
 }
 

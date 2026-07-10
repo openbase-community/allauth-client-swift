@@ -115,16 +115,33 @@ public struct InputField: View {
 
 /// Code input field (for OTP, verification codes, etc.)
 public struct CodeField: View {
+    /// The character set a code uses, which determines the keyboard shown.
+    enum Format {
+        /// Letter-based codes such as allauth's `XXXX-XXXX` login,
+        /// email-verification, and password-reset codes.
+        case alphanumeric
+        /// Digit-only codes such as 6-digit TOTP codes.
+        case numeric
+    }
+
     let label: String
     @Binding var text: String
     let errors: JSON?
     let fieldName: String
+    let format: Format
 
-    init(_ label: String = "Code", text: Binding<String>, errors: JSON? = nil, fieldName: String = "code") {
+    init(
+        _ label: String = "Code",
+        text: Binding<String>,
+        errors: JSON? = nil,
+        fieldName: String = "code",
+        format: Format = .alphanumeric
+    ) {
         self.label = label
         self._text = text
         self.errors = errors
         self.fieldName = fieldName
+        self.format = format
     }
 
     public var body: some View {
@@ -135,14 +152,26 @@ public struct CodeField: View {
 
             TextField(label, text: $text)
                 .textFieldStyle(.roundedBorder)
-                .keyboardType(.numberPad)
-                .autocapitalization(.none)
+                .keyboardType(format == .numeric ? .numberPad : .asciiCapable)
+                .textInputAutocapitalization(format == .numeric ? .never : .characters)
                 .autocorrectionDisabled()
+                .textContentType(.oneTimeCode)
                 .font(.system(.title2, design: .monospaced))
                 .multilineTextAlignment(.center)
 
             FormErrors(errors: errors, field: fieldName)
         }
+    }
+}
+
+extension String {
+    /// Normalizes a user-entered verification code before submission:
+    /// strips whitespace and the display dashes (codes are shown as
+    /// `XXXX-XXXX`) and uppercases to match the server's code alphabet.
+    var normalizedCode: String {
+        return replacingOccurrences(of: "-", with: "")
+            .filter { !$0.isWhitespace }
+            .uppercased()
     }
 }
 

@@ -131,7 +131,7 @@ public struct ConfirmLoginCodeView: View {
 
     private func confirmCode() async {
         response = await performRequest(loading: $isLoading, context: "confirm login code") {
-            try await client.confirmLoginCode(code: code)
+            try await client.confirmLoginCode(code: code.normalizedCode)
         }
 
         if response?.isSuccess == true {

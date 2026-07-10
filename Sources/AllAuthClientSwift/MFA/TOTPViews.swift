@@ -103,7 +103,7 @@ public struct ActivateTOTPView: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
 
-                CodeField(text: $code, errors: response)
+                CodeField(text: $code, errors: response, format: .numeric)
 
                 FormErrors(errors: response)
 
@@ -241,7 +241,7 @@ struct TOTPCodeForm<Footer: View>: View {
             subtitle: subtitle
         ) {
             VStack(spacing: 16) {
-                CodeField(text: $code, errors: response)
+                CodeField(text: $code, errors: response, format: .numeric)
 
                 FormErrors(errors: response)
 
