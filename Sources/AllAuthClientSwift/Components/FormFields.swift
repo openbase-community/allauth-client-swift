@@ -4,6 +4,7 @@ import SwiftyJSON
 
 /// Email input field with validation display
 public struct EmailField: View {
+    @Environment(\.authPasswordAutofillEnabled) private var passwordAutofillEnabled
     let label: String
     @Binding var text: String
     let errors: JSON?
@@ -22,7 +23,7 @@ public struct EmailField: View {
 
             TextField(label, text: $text)
                 .textFieldStyle(.roundedBorder)
-                .textContentType(.emailAddress)
+                .authCredentialContentType(.emailAddress, autofillEnabled: passwordAutofillEnabled)
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
                 .autocorrectionDisabled()
@@ -34,6 +35,7 @@ public struct EmailField: View {
 
 /// Username input field with validation display
 public struct UsernameField: View {
+    @Environment(\.authPasswordAutofillEnabled) private var passwordAutofillEnabled
     let label: String
     @Binding var text: String
     let errors: JSON?
@@ -52,7 +54,7 @@ public struct UsernameField: View {
 
             TextField(label, text: $text)
                 .textFieldStyle(.roundedBorder)
-                .textContentType(.username)
+                .authCredentialContentType(.username, autofillEnabled: passwordAutofillEnabled)
                 .autocapitalization(.none)
                 .autocorrectionDisabled()
 
@@ -63,6 +65,7 @@ public struct UsernameField: View {
 
 /// Password input field with validation display
 public struct PasswordField: View {
+    @Environment(\.authPasswordAutofillEnabled) private var passwordAutofillEnabled
     let label: String
     @Binding var text: String
     let errors: JSON?
@@ -83,7 +86,8 @@ public struct PasswordField: View {
 
             SecureField(label, text: $text)
                 .textFieldStyle(.roundedBorder)
-                .textContentType(.password)
+                .authCredentialContentType(.password, autofillEnabled: passwordAutofillEnabled)
+                .autocorrectionDisabled()
 
             FormErrors(errors: errors, field: fieldName)
         }

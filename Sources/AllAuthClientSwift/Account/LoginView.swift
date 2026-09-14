@@ -6,6 +6,7 @@ import SwiftyJSON
 /// Login view
 /// Equivalent to Login.js in the React implementation
 public struct LoginView: View {
+    @Environment(\.authPasswordAutofillEnabled) private var passwordAutofillEnabled
     @EnvironmentObject var authContext: AuthContext
     @EnvironmentObject var navigationManager: AuthNavigationManager
 
@@ -48,7 +49,7 @@ public struct LoginView: View {
                 HStack(spacing: 8) {
                     PasswordField(text: $password, errors: response)
 
-                    if hasSavedPassword {
+                    if passwordAutofillEnabled && hasSavedPassword {
                         Button {
                             fillSavedPassword()
                         } label: {
@@ -172,7 +173,7 @@ public struct LoginView: View {
     }
 
     private func loadSavedCredentials() {
-        guard email.isEmpty, username.isEmpty, password.isEmpty else {
+        guard passwordAutofillEnabled, email.isEmpty, username.isEmpty, password.isEmpty else {
             return
         }
 
@@ -196,6 +197,7 @@ public struct LoginView: View {
     }
 
     private func fillSavedPassword() {
+        guard passwordAutofillEnabled else { return }
         isFillingPassword = true
         Task {
             let savedPassword = await credentialStore.loadPassword()
@@ -209,6 +211,7 @@ public struct LoginView: View {
     }
 
     private func saveSuccessfulCredentials() {
+        guard passwordAutofillEnabled else { return }
         if authContext.emailAuthEnabled && !email.isEmpty {
             credentialStore.save(identifier: email, identifierKind: .email, password: password)
         } else if authContext.usernameAuthEnabled && !username.isEmpty {
