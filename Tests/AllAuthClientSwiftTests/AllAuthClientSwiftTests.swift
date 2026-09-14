@@ -86,3 +86,21 @@ import SwiftyJSON
     #expect(!entries[0].line.contains("gabe@example.com"))
     #expect(!entries[0].line.contains("Bearer abcdefghijklmnop"))
 }
+
+@Test func parsesEmailVerificationDeepLink() {
+    let url = URL(string: "example-app://auth/verify-email?key=abc%3A123")!
+    #expect(EmailVerificationDeepLink.key(from: url) == "abc:123")
+}
+
+@Test func rejectsMalformedEmailVerificationDeepLinks() {
+    let urls = [
+        "example-app://other/verify-email?key=abc",
+        "example-app://auth/verify-email?key=abc&extra=value",
+        "example-app://auth/verify-email?key=%20abc",
+        "example-app://auth/verify-email#key=abc",
+    ]
+
+    for value in urls {
+        #expect(EmailVerificationDeepLink.key(from: URL(string: value)!) == nil)
+    }
+}

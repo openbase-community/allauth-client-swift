@@ -286,6 +286,12 @@ public struct VerificationEmailSentView: View {
         }
         .navigationTitle("Verify Email")
         .navigationBarTitleDisplayMode(.inline)
+        .onOpenURL { url in
+            guard let key = EmailVerificationDeepLink.key(from: url) else { return }
+            Task {
+                await verifyEmail(fromDeepLinkKey: key)
+            }
+        }
     }
 
     /// Re-checks the session's auth state. If the email was verified in a way
@@ -299,6 +305,26 @@ public struct VerificationEmailSentView: View {
         await authContext.refreshAuth()
 
         if !authContext.isAuthenticated && authContext.isPending(flow: .verifyEmail) {
+            stillPendingAfterCheck = true
+        }
+    }
+
+    /// Completes verification inside the original pending signup session so
+    /// returning from an emailed browser link does not force another login.
+    private func verifyEmail(fromDeepLinkKey key: String) async {
+        stillPendingAfterCheck = false
+        isCheckingVerification = true
+        defer { isCheckingVerification = false }
+
+        do {
+            _ = try await AllAuthClient.shared.verifyEmail(key: key)
+            await authContext.refreshAuth()
+        } catch {
+            stillPendingAfterCheck = true
+            return
+        }
+
+        if !authContext.isAuthenticated {
             stillPendingAfterCheck = true
         }
     }
