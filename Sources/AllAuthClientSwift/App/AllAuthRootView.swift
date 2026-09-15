@@ -7,6 +7,7 @@ public struct AllAuthRootView<AuthenticatedContent: View>: View {
     @EnvironmentObject var authContext: AuthContext
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var navigationManager: AuthNavigationManager
+    @State private var emailVerificationInFlight = false
 
     private let authenticatedContent: () -> AuthenticatedContent
     private let onLoginShake: (() -> Void)?
@@ -53,6 +54,9 @@ public struct AllAuthRootView<AuthenticatedContent: View>: View {
                 refreshPendingAuthOnForeground()
             }
         }
+        .onOpenURL { url in
+            completeEmailVerification(url)
+        }
     }
 
     private var hasPendingMandatoryFlow: Bool {
@@ -72,6 +76,36 @@ public struct AllAuthRootView<AuthenticatedContent: View>: View {
 
         Task {
             await authContext.refreshAuth()
+        }
+    }
+
+    /// Own emailed verification URLs at the stable auth root. A URL can be
+    /// delivered before the pending-flow leaf is mounted after app activation.
+    private func completeEmailVerification(_ url: URL) {
+        guard EmailVerificationDeepLink.key(from: url) != nil,
+              !emailVerificationInFlight
+        else { return }
+
+        emailVerificationInFlight = true
+        Task {
+            let completion = await EmailVerificationDeepLink.complete(
+                url: url,
+                verify: { key in
+                    _ = try await AllAuthClient.shared.verifyEmail(key: key)
+                },
+                refreshAuth: {
+                    await authContext.refreshAuth()
+                },
+                isAuthenticated: {
+                    authContext.isAuthenticated
+                }
+            )
+            AuthDiagnostics.log(
+                "EmailVerification",
+                "app handoff completed",
+                metadata: ["result": "\(completion)"]
+            )
+            emailVerificationInFlight = false
         }
     }
 }

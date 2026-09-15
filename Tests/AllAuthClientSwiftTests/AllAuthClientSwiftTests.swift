@@ -104,3 +104,45 @@ import SwiftyJSON
         #expect(EmailVerificationDeepLink.key(from: URL(string: value)!) == nil)
     }
 }
+
+@Test @MainActor func completesEmailVerificationDeepLinkFromAuthRoot() async {
+    let url = URL(string: "example-app://auth/verify-email?key=abc%3A123")!
+    var verifiedKey: String?
+    var refreshed = false
+    var authenticated = false
+
+    let completion = await EmailVerificationDeepLink.complete(
+        url: url,
+        verify: { key in
+            verifiedKey = key
+            authenticated = true
+        },
+        refreshAuth: {
+            refreshed = true
+        },
+        isAuthenticated: {
+            authenticated
+        }
+    )
+
+    #expect(verifiedKey == "abc:123")
+    #expect(refreshed)
+    #expect(completion == .authenticated)
+}
+
+@Test @MainActor func ignoresNonVerificationURLWithoutSideEffects() async {
+    let url = URL(string: "example-app://reports/123")!
+    var verifyCalled = false
+    var refreshCalled = false
+
+    let completion = await EmailVerificationDeepLink.complete(
+        url: url,
+        verify: { _ in verifyCalled = true },
+        refreshAuth: { refreshCalled = true },
+        isAuthenticated: { false }
+    )
+
+    #expect(completion == .ignored)
+    #expect(!verifyCalled)
+    #expect(!refreshCalled)
+}

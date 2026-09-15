@@ -1,6 +1,13 @@
 import Foundation
 
 enum EmailVerificationDeepLink {
+    enum Completion: Equatable {
+        case ignored
+        case authenticated
+        case stillPending
+        case failed
+    }
+
     static func key(from url: URL) -> String? {
         guard url.scheme?.isEmpty == false,
               url.host?.lowercased() == "auth",
@@ -23,5 +30,28 @@ enum EmailVerificationDeepLink {
             return nil
         }
         return trimmed
+    }
+
+    /// Completes an emailed verification handoff from the stable auth root.
+    ///
+    /// The URL can arrive while SwiftUI is rebuilding the pending-flow leaf,
+    /// so leaf views must not own this lifecycle event. Closure injection keeps
+    /// the state transition directly testable without a network dependency.
+    @MainActor
+    static func complete(
+        url: URL,
+        verify: (String) async throws -> Void,
+        refreshAuth: () async -> Void,
+        isAuthenticated: () -> Bool
+    ) async -> Completion {
+        guard let key = key(from: url) else { return .ignored }
+
+        do {
+            try await verify(key)
+            await refreshAuth()
+            return isAuthenticated() ? .authenticated : .stillPending
+        } catch {
+            return .failed
+        }
     }
 }
