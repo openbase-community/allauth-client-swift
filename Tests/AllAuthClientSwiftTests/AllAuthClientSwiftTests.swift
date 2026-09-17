@@ -1,6 +1,16 @@
 import Testing
+import Foundation
 import SwiftyJSON
 @testable import AllAuthClientSwift
+
+@Test func diagnosticTimestampRetainsSubsecondTiming() throws {
+    AuthDiagnostics.log("ClockTest", "timestamp precision")
+    let entry = try #require(AuthDiagnostics.recentEntries().last { $0.component == "ClockTest" })
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    #expect(entry.timestamp.contains("."))
+    #expect(formatter.date(from: entry.timestamp) != nil)
+}
 
 @Test @MainActor func clientExists() async throws {
     let client: AllAuthClient? = AllAuthClient.shared

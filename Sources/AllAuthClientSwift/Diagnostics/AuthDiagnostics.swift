@@ -212,6 +212,8 @@ public enum AuthDiagnostics {
     }
 
     private static func isoTimestamp() -> String {
-        ISO8601DateFormatter().string(from: Date())
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: Date())
     }
 }
