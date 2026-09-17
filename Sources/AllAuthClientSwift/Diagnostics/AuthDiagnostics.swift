@@ -2,7 +2,7 @@ import Foundation
 import SwiftyJSON
 
 public enum AuthDiagnostics {
-    public struct Entry: Codable, Equatable {
+    public struct Entry: Codable, Equatable, Sendable {
         public let timestamp: String
         public let component: String
         public let message: String
@@ -15,6 +15,21 @@ public enum AuthDiagnostics {
     private static let enabledEnvironmentKey = "OPENBASE_AUTH_DIAGNOSTICS"
     private static let entriesLock = NSLock()
     nonisolated(unsafe) private static var entries: [Entry] = []
+    nonisolated(unsafe) private static var journal: DiagnosticJournal?
+
+    /// Opt-in only: apps choose whether and where redacted diagnostics persist.
+    public static func configureJournal(url: URL, maximumBytes: Int = 16 * 1024 * 1024) {
+        entriesLock.lock()
+        journal = DiagnosticJournal(url: url, maximumBytes: maximumBytes)
+        entriesLock.unlock()
+    }
+
+    public static func flushJournal() -> String? {
+        entriesLock.lock()
+        let current = journal
+        entriesLock.unlock()
+        return current?.flush()
+    }
 
     public static var isEnabled: Bool {
         let environmentValue = ProcessInfo.processInfo.environment[enabledEnvironmentKey]?.lowercased()
@@ -208,6 +223,8 @@ public enum AuthDiagnostics {
         if entries.count > maxBufferedEntries {
             entries.removeFirst(entries.count - maxBufferedEntries)
         }
+        // Persistence always receives the same already-redacted entry as the buffer.
+        if let data = try? JSONEncoder().encode(entry) { journal?.append(data) }
         entriesLock.unlock()
     }
 
