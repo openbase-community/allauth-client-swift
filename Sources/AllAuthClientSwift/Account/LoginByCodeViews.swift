@@ -35,8 +35,12 @@ public struct RequestLoginCodeView: View {
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
 
-                    NavigationLink {
-                        ConfirmLoginCodeView(email: email)
+                    // Path-based (not a view-destination NavigationLink) so
+                    // pop and restart from the Enter Code screen behave the
+                    // same however it was reached.
+                    Button {
+                        navigationManager.loginCodeEmail = email
+                        navigationManager.navigate(to: .confirmLoginCode)
                     } label: {
                         Text("Enter Code")
                             .frame(maxWidth: .infinity)
@@ -67,6 +71,12 @@ public struct RequestLoginCodeView: View {
         }
         .navigationTitle("Sign In")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            applyRestart(navigationManager.loginCodeRestart)
+        }
+        .onChange(of: navigationManager.loginCodeRestart) { restart in
+            applyRestart(restart)
+        }
     }
 
     private func requestCode() async {
@@ -75,7 +85,21 @@ public struct RequestLoginCodeView: View {
         }
 
         if response?.isSuccess == true || response?.isLoginCodePending == true {
+            navigationManager.loginCodeEmail = email
             codeSent = true
+        }
+    }
+
+    /// Return to the email form (keeping the address) and show why, when the
+    /// Enter Code screen sends the user back to request a new code.
+    private func applyRestart(_ restart: AuthNavigationManager.LoginCodeRestart?) {
+        guard let restart else { return }
+        navigationManager.loginCodeRestart = nil
+        codeSent = false
+        if let notice = restart.notice {
+            response = LoginCodeConfirmation.errorResponse(notice)
+        } else {
+            response = nil
         }
     }
 }
@@ -103,8 +127,8 @@ public struct ConfirmLoginCodeView: View {
     public var body: some View {
         AuthForm(
             title: "Enter Code",
-            subtitle: email != nil
-                ? "Enter the code we sent to \(email!)"
+            subtitle: displayedEmail != nil
+                ? "Enter the code we sent to \(displayedEmail!)"
                 : "Enter the code from your email"
         ) {
             VStack(spacing: 16) {
@@ -115,9 +139,10 @@ public struct ConfirmLoginCodeView: View {
                 PrimaryButton(title: "Sign In", isLoading: isLoading) {
                     await confirmCode()
                 }
+                .accessibilityIdentifier("confirm-login-code-submit")
 
                 LinkButton(title: "Request a new code") {
-                    navigationManager.pop()
+                    navigationManager.restartLoginByCode(notice: nil)
                 }
 
                 LinkButton(title: "Sign in with password instead") {
@@ -129,17 +154,32 @@ public struct ConfirmLoginCodeView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func confirmCode() async {
-        response = await performRequest(loading: $isLoading, context: "confirm login code") {
-            try await client.confirmLoginCode(code: code.normalizedCode)
-        }
+    private var displayedEmail: String? {
+        email ?? navigationManager.loginCodeEmail
+    }
 
-        if response?.isSuccess == true {
-            // Login successful, navigation handled by auth context
+    private func confirmCode() async {
+        let confirmation = LoginCodeConfirmation { code in
+            try await client.confirmLoginCode(code: code)
+        }
+        let result = await confirmation.submit(code: code, loading: $isLoading)
+        response = result.response
+
+        switch result.outcome {
+        case .signedIn:
+            // The client already published the authenticated response; the
+            // root view leaves the auth flow. Refresh to pick up the user.
             await authContext.refreshAuth()
-        } else if response?["status"].intValue == 409 {
+        case .nextStep:
+            // The auth root renders the newly pending flow (e.g. MFA).
             navigationManager.popToRoot()
-            navigationManager.navigate(to: .requestLoginCode)
+        case .restartFlow:
+            navigationManager.restartLoginByCode(notice: LoginCodeConfirmation.expiredMessage)
+            // Drop the stale pending login-code flow so the auth root stops
+            // rendering the Enter Code screen.
+            await authContext.refreshAuth()
+        case .showErrors:
+            break
         }
     }
 }

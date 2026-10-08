@@ -36,6 +36,33 @@ public class AuthNavigationManager: ObservableObject {
         }
     }
 
+    // MARK: Login by code
+
+    /// A request for the Request Code screen to start over, optionally with
+    /// a message explaining why (for example an expired code).
+    public struct LoginCodeRestart: Equatable {
+        public let id = UUID()
+        public let notice: String?
+    }
+
+    /// The address the current login code was sent to, so the Enter Code
+    /// screen can name it however it was reached.
+    @Published public var loginCodeEmail: String?
+
+    /// Set by `restartLoginByCode(notice:)`; consumed by the Request Code
+    /// screen.
+    @Published public var loginCodeRestart: LoginCodeRestart?
+
+    /// Leave the Enter Code screen for a Request Code screen in its email
+    /// form. The Request Code screen may be an existing instance that still
+    /// shows "Check Your Email", so it is told to reset through
+    /// `loginCodeRestart` rather than relying on a fresh view.
+    public func restartLoginByCode(notice: String?) {
+        loginCodeRestart = LoginCodeRestart(notice: notice)
+        popToRoot()
+        navigate(to: .requestLoginCode)
+    }
+
     /// Handle authentication state changes and navigate accordingly
     public func handleAuthChange(_ change: AuthChangeEvent) {
         switch change {
