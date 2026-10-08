@@ -205,6 +205,12 @@ extension AuthContext {
         return config?["data"]["account"]["login_by_code_enabled"].bool ?? false
     }
 
+    /// Whether signup verifies the address with an emailed code typed into
+    /// the app (instead of a link that opens the website).
+    public var emailVerificationByCodeEnabled: Bool {
+        return config?["data"]["account"]["email_verification_by_code_enabled"].bool ?? false
+    }
+
     /// Whether MFA is enabled
     public var mfaEnabled: Bool {
         return config?["data"]["mfa"]["enabled"].bool ?? false

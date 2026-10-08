@@ -156,7 +156,11 @@ public struct AllAuthUnauthenticatedRootView: View {
     @ViewBuilder
     private var initialView: some View {
         if authContext.isPending(flow: .verifyEmail) {
-            VerificationEmailSentView()
+            if authContext.emailVerificationByCodeEnabled {
+                VerifyEmailByCodeView()
+            } else {
+                VerificationEmailSentView()
+            }
         } else if authContext.isPending(flow: .loginByCode) {
             ConfirmLoginCodeView()
         } else if authContext.isPending(flow: .mfaAuthenticate) {
@@ -189,7 +193,11 @@ public struct AllAuthUnauthenticatedRootView: View {
         case .signup:
             SignupView()
         case .verifyEmail:
-            VerificationEmailSentView()
+            if authContext.emailVerificationByCodeEnabled {
+                VerifyEmailByCodeView()
+            } else {
+                VerificationEmailSentView()
+            }
         case .requestLoginCode:
             RequestLoginCodeView()
         case .confirmLoginCode:
