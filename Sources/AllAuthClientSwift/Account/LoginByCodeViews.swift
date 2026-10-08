@@ -95,6 +95,9 @@ public struct RequestLoginCodeView: View {
     private func applyRestart(_ restart: AuthNavigationManager.LoginCodeRestart?) {
         guard let restart else { return }
         navigationManager.loginCodeRestart = nil
+        if let restartEmail = navigationManager.loginCodeEmail {
+            email = restartEmail
+        }
         codeSent = false
         if let notice = restart.notice {
             response = LoginCodeConfirmation.errorResponse(notice)

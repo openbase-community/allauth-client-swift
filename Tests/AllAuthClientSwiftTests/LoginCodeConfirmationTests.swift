@@ -296,4 +296,22 @@ final class StubAllAuthProtocol: URLProtocol, @unchecked Sendable {
         #expect(client.sessionToken == "post-login-session")
         #expect(client.jwtAccessToken == "post-login-access")
     }
+
+    @Test func changedStoredSessionDoesNotHideExpiredBearerCredential() async {
+        defer { cleanUp() }
+        let client = AllAuthClient.shared
+        client.sessionToken = "pre-login-session"
+        client.jwtAccessToken = "expired-access"
+        StubAllAuthProtocol.handler = { _ in (410, ["status": 410, "meta": ["is_authenticated": false]]) }
+        StubAllAuthProtocol.beforeResponse = {
+            AllAuthClient.shared.sessionToken = "pending-flow-session"
+        }
+
+        await #expect(throws: AllAuthError.self) {
+            _ = try await client.getAuth()
+        }
+
+        #expect(client.sessionToken == nil)
+        #expect(client.jwtAccessToken == nil)
+    }
 }

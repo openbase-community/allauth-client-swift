@@ -57,9 +57,13 @@ extension AllAuthClient {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AllAuthError.invalidResponse
         }
-        // Whether a concurrent request replaced this request's credentials
-        // while it was in flight (checked before this response stores any).
-        let credentialsSuperseded = jwtAccessToken != accessToken || sessionToken != currentSessionToken
+        // Whether a concurrent request replaced the credential this request
+        // actually sent while it was in flight (checked before this response
+        // stores any).
+        let credentialsSuperseded = sentCredentialsWereSuperseded(
+            accessToken: accessToken,
+            sessionToken: currentSessionToken
+        )
 
         let isTokenRefreshRequest = url == urls.tokenRefresh
         AuthDiagnostics.log(
@@ -156,6 +160,18 @@ extension AllAuthClient {
         if let refreshToken = json["data"]["refresh_token"].string ?? json["meta"]["refresh_token"].string {
             jwtRefreshToken = refreshToken
         }
+    }
+
+    func sentCredentialsWereSuperseded(accessToken sentAccessToken: String?, sessionToken sentSessionToken: String?) -> Bool {
+        if let sentAccessToken {
+            return jwtAccessToken != sentAccessToken
+        }
+
+        if let sentSessionToken {
+            return sessionToken != sentSessionToken || jwtAccessToken != nil
+        }
+
+        return sessionToken != nil || jwtAccessToken != nil
     }
 
     func logTokenRefreshResultIfNeeded(
