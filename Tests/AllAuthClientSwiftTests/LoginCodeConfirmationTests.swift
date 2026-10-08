@@ -262,4 +262,38 @@ final class StubAllAuthProtocol: URLProtocol, @unchecked Sendable {
         #expect(result.outcome == .restartFlow)
         #expect(result.response.generalErrors == [LoginCodeConfirmation.expiredMessage])
     }
+
+    @Test func expiredSessionClearsTheCredentialsItWasSentWith() async {
+        defer { cleanUp() }
+        let client = AllAuthClient.shared
+        client.sessionToken = "old-session"
+        StubAllAuthProtocol.handler = { _ in (410, ["status": 410, "meta": ["is_authenticated": false]]) }
+
+        await #expect(throws: AllAuthError.self) {
+            _ = try await client.getAuth()
+        }
+
+        #expect(client.sessionToken == nil)
+    }
+
+    /// The 2026-10-08 field test: verifying the email logged the user in while
+    /// a foreground refresh still carried the pre-login session token. Its 410
+    /// used to wipe the fresh tokens and sign the user straight back out.
+    @Test func staleExpiredSessionResponseKeepsNewerCredentials() async {
+        defer { cleanUp() }
+        let client = AllAuthClient.shared
+        client.sessionToken = "pre-login-session"
+        StubAllAuthProtocol.handler = { _ in (410, ["status": 410, "meta": ["is_authenticated": false]]) }
+        StubAllAuthProtocol.beforeResponse = {
+            AllAuthClient.shared.sessionToken = "post-login-session"
+            AllAuthClient.shared.jwtAccessToken = "post-login-access"
+        }
+
+        await #expect(throws: AllAuthError.self) {
+            _ = try await client.getAuth()
+        }
+
+        #expect(client.sessionToken == "post-login-session")
+        #expect(client.jwtAccessToken == "post-login-access")
+    }
 }

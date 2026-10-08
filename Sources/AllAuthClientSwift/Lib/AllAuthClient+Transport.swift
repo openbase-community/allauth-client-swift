@@ -57,6 +57,9 @@ extension AllAuthClient {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AllAuthError.invalidResponse
         }
+        // Whether a concurrent request replaced this request's credentials
+        // while it was in flight (checked before this response stores any).
+        let credentialsSuperseded = jwtAccessToken != accessToken || sessionToken != currentSessionToken
 
         let isTokenRefreshRequest = url == urls.tokenRefresh
         AuthDiagnostics.log(
@@ -115,13 +118,22 @@ extension AllAuthClient {
         logTokenRefreshResultIfNeeded(json: json, responseData: responseData, statusCode: httpResponse.statusCode, isTokenRefreshRequest: isTokenRefreshRequest)
 
         if httpResponse.statusCode == 410 {
+            // Only the credentials this request carried have expired. When a
+            // concurrent sign-in replaced them while it was in flight (e.g. an
+            // email-verification handoff logs in while a foreground refresh
+            // with the pre-login session token is still pending), keep the
+            // newer ones instead of signing the user straight back out.
             AuthDiagnostics.log(
                 "AllAuthClient",
-                "server reported expired session",
+                credentialsSuperseded
+                    ? "server reported expired session for superseded credentials; keeping current ones"
+                    : "server reported expired session",
                 metadata: ["url": AuthDiagnostics.endpointSummary(url)]
             )
-            sessionToken = nil
-            clearJWTTokens()
+            if !credentialsSuperseded {
+                sessionToken = nil
+                clearJWTTokens()
+            }
             throw AllAuthError.sessionExpired
         }
 
