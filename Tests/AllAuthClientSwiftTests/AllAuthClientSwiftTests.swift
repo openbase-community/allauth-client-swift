@@ -76,13 +76,9 @@ import SwiftyJSON
     #expect(summary.contains("passwordless"))
 }
 
-@Test func authDiagnosticsRetainsSanitizedEntriesWhenVerboseLoggingDisabled() {
+@Test func authDiagnosticsRetainsSanitizedEntriesWhenVerboseLoggingDisabled() throws {
     AuthDiagnostics.setEnabled(false)
-    AuthDiagnostics.clearBufferedEntries()
-    defer {
-        AuthDiagnostics.clearBufferedEntries()
-        AuthDiagnostics.setEnabled(false)
-    }
+    defer { AuthDiagnostics.setEnabled(false) }
 
     AuthDiagnostics.log(
         "DiagnosticsTest",
@@ -90,8 +86,9 @@ import SwiftyJSON
         metadata: ["authorization": "Bearer abcdefghijklmnop"]
     )
 
-    let entries = AuthDiagnostics.recentEntries()
-    #expect(entries.count == 1)
+    // Other tests log concurrently into the shared buffer; look only at ours.
+    let entries = AuthDiagnostics.recentEntries().filter { $0.component == "DiagnosticsTest" }
+    try #require(entries.count == 1)
     #expect(entries[0].metadata["authorization"] == "<redacted>")
     #expect(!entries[0].line.contains("gabe@example.com"))
     #expect(!entries[0].line.contains("Bearer abcdefghijklmnop"))
